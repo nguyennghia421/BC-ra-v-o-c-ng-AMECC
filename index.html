@@ -423,7 +423,7 @@
   </div>
 
   <div class="panel">
-    <div class="panel-head"><h2>Top công trình / dự án</h2></div>
+    <div class="panel-head"><h2>Top công trình / dự án</h2><span class="tag" id="projTag">Số phiếu</span></div>
     <div class="chart-box"><canvas id="projectChart"></canvas></div>
   </div>
 
@@ -491,7 +491,17 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 const SHEET_ID  = '1kI8W1hJGHu-lwvm0hlwjqHWBIBuqlaA_XDdRHp4x1LE';
-const SHEET_GID = '0';     // gid của tab chứa dữ liệu (xem trên URL: ...#gid=0)
+const SHEET_GID = '0';     // gid của tab chính (xem trên URL: ...#gid=0)
+
+/* Hai tab con nối với tab chính qua phieu_id — cho phép 1 phiếu thuộc nhiều
+   công trình / hạng mục. Đặt USE_CHILD_TABS = false để chỉ dùng tab chính.
+   Tên tab phải khớp CHÍNH XÁC với tên hiển thị dưới đáy Google Sheet.
+   Tab con lỗi hoặc rỗng thì trang tự lùi về cột tương ứng ở tab chính. */
+const USE_CHILD_TABS = true;
+const CHILD_TABS = {
+  cs : { sheet:'Công trình dự án', valueKw:['cong trinh du an','cong trinh','du an'] },
+  hms: { sheet:'Hạng mục',         valueKw:['hang muc'] }
+};
 
 // Tự động tải lại sau mỗi N phút. Đặt 0 để tắt.
 const AUTO_REFRESH_MINUTES = 10;
@@ -628,7 +638,7 @@ const STATUS_TEXT = { done:'Hoàn thành', pending:'Đang xử lý', rejected:'T
  * Cách này không vướng CORS nên chạy được cả khi mở file bằng file:// —
  * chỉ cần sheet ở chế độ "bất kỳ ai có link đều xem được".
  */
-function loadGviz(headerRows){
+function loadGviz(params){
   return new Promise((resolve, reject) => {
     const cb = '__gviz_cb_' + Math.random().toString(36).slice(2);
     const el = document.createElement('script');
@@ -655,11 +665,10 @@ function loadGviz(headerRows){
     };
     el.onerror = () => { cleanup(); reject(new Error('Không kết nối được tới docs.google.com.')); };
 
+    const qs = Object.entries(params)
+      .map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
     el.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
-           + `?gid=${encodeURIComponent(SHEET_GID)}`
-           + `&headers=${headerRows}`
-           + `&tqx=responseHandler:${cb}`
-           + `&_=${Date.now()}`;                    // chống cache
+           + `?${qs}&tqx=responseHandler:${cb}&_=${Date.now()}`;   // _ = chống cache
     document.head.appendChild(el);
   });
 }
@@ -757,6 +766,53 @@ function gridToRecords(grid, map){
 }
 
 /**
+ * Đọc một tab con dạng (phieu_id, giá_trị) thành { phieu_id: [giá trị, ...] }.
+ * Một phiếu xuất hiện nhiều dòng => gom thành mảng, bỏ trùng.
+ */
+async function loadChildMap(cfg){
+  const grid = tableToGrid(await loadGviz({ sheet: cfg.sheet, headers: 1 }));
+  const norm = grid.headers.map(deburr);
+
+  let iId = norm.findIndex(h => ['phieu id','ma phieu','so phieu'].includes(h));
+  if(iId < 0) iId = norm.findIndex(h => h.includes('phieu'));
+  if(iId < 0) iId = 0;
+
+  let iVal = -1;
+  for(const kw of cfg.valueKw){
+    iVal = norm.findIndex((h,i) => i !== iId && h.includes(kw));
+    if(iVal >= 0) break;
+  }
+  if(iVal < 0) iVal = norm.findIndex((_,i) => i !== iId);   // cột còn lại
+  if(iVal < 0) return { map:{}, rows:0 };
+
+  const map = {};
+  let rows = 0;
+  for(const row of grid.rows){
+    const id = String(row[iId]  == null ? '' : row[iId]).trim();
+    const v  = String(row[iVal] == null ? '' : row[iVal]).trim();
+    if(!id || !v) continue;
+    if(!map[id]) map[id] = [];
+    if(!map[id].includes(v)){ map[id].push(v); rows++; }
+  }
+  return { map, rows };
+}
+
+/**
+ * Gắn danh sách công trình / hạng mục từ tab con vào từng phiếu.
+ * Phiếu không có dòng nào ở tab con thì lùi về giá trị trên tab chính.
+ */
+function applyChildTables(records, child){
+  for(const r of records){
+    const ct = r.id && child.cs  && child.cs[r.id];
+    const hm = r.id && child.hms && child.hms[r.id];
+    r.cs  = (ct && ct.length) ? ct : [r.c || 'Không rõ'];
+    r.hms = (hm && hm.length) ? hm : (r.hm ? [r.hm] : []);
+    r.cTxt  = r.cs.join(', ');
+    r.hmTxt = r.hms.join(', ');
+  }
+}
+
+/**
  * Thử lần lượt headers = 1..4 để xử lý các sheet có dòng tiêu đề lớn / dòng
  * trống phía trên bảng dữ liệu. Chọn phương án nhận diện được nhiều cột nhất.
  */
@@ -766,7 +822,7 @@ async function fetchSheet(){
   for(const hr of [1,2,3,4]){
     let table;
     try{
-      table = await loadGviz(hr);
+      table = await loadGviz({ gid: SHEET_GID, headers: hr });
     }catch(e){
       lastErr = e;
       if(hr === 1) throw e;    // lỗi kết nối/quyền — thử tiếp cũng vô ích
@@ -790,7 +846,22 @@ async function fetchSheet(){
   if(!best.records.length)
     throw new Error('Sheet không có dòng dữ liệu nào có ngày hợp lệ.');
 
-  return best;
+  // Tab con — hỏng hoặc rỗng thì bỏ qua, báo cáo vẫn chạy bằng tab chính
+  const child = { cs:null, hms:null }, childInfo = [], childWarn = [];
+  if(USE_CHILD_TABS && best.map.id != null){
+    await Promise.all(Object.entries(CHILD_TABS).map(async ([key,cfg]) => {
+      try{
+        const { map, rows } = await loadChildMap(cfg);
+        if(rows){ child[key] = map; childInfo.push(`${cfg.sheet}: ${rows} dòng`); }
+      }catch(e){
+        childWarn.push(cfg.sheet);
+        console.warn('Không đọc được tab con "'+cfg.sheet+'":', e.message);
+      }
+    }));
+  }
+  applyChildTables(best.records, child);
+
+  return Object.assign(best, { childInfo, childWarn });
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -884,11 +955,22 @@ function fillSelect(sel, options, allLabel, preferred){
   return sel.value;
 }
 
+/** Đếm số phiếu theo một trường. Trường dạng mảng (cs, hms) thì mỗi giá trị
+    trong mảng được cộng 1 — nên tổng có thể lớn hơn số phiếu. */
+function tally(data, key){
+  const m = {};
+  data.forEach(r => {
+    const v = r[key];
+    (Array.isArray(v) ? v : [v]).forEach(x => {
+      if(x != null && x !== '') m[x] = (m[x]||0) + 1;
+    });
+  });
+  return m;
+}
+
 /** Sắp xếp giá trị theo số phiếu giảm dần. */
 function byFrequency(key, source){
-  const m = {};
-  source.forEach(r => { m[r[key]] = (m[r[key]]||0) + 1; });
-  return Object.entries(m).sort((a,b) => b[1]-a[1]).map(([v]) => v);
+  return Object.entries(tally(source, key)).sort((a,b) => b[1]-a[1]).map(([v]) => v);
 }
 
 function populateWeekFilter(){
@@ -913,7 +995,7 @@ function populateFilters(){
     ? fillSelect($('khoiFilter'), byFrequency('khoi', RECORDS).map(v=>[v,v]), 'Tất cả khối')
     : 'all';
   state.unit    = fillSelect($('unitFilter'),    byFrequency('u', RECORDS).map(v=>[v,v]), 'Tất cả đơn vị');
-  state.project = fillSelect($('projectFilter'), byFrequency('c', RECORDS).map(v=>[v,v]), 'Tất cả công trình');
+  state.project = fillSelect($('projectFilter'), byFrequency('cs', RECORDS).map(v=>[v,v]), 'Tất cả công trình');
   state.status  = fillSelect($('statusFilter'),  byFrequency('s', RECORDS).map(v=>[v,v]), 'Tất cả');
   firstLoad = false;
 }
@@ -924,7 +1006,7 @@ function getFiltered(){
     && (state.week   === 'all' || r.w === state.week)
     && (state.khoi   === 'all' || r.khoi === state.khoi)
     && (state.unit   === 'all' || r.u === state.unit)
-    && (state.project=== 'all' || r.c === state.project)
+    && (state.project=== 'all' || r.cs.includes(state.project))
     && (state.status === 'all' || r.s === state.status));
 }
 
@@ -965,9 +1047,7 @@ function buildTrend(data){
 }
 
 function topN(data, key, n){
-  const m = {};
-  data.forEach(r => { m[r[key]] = (m[r[key]]||0) + 1; });
-  const arr = Object.entries(m).sort((a,b) => b[1]-a[1]);
+  const arr = Object.entries(tally(data, key)).sort((a,b) => b[1]-a[1]);
   const top = arr.slice(0,n);
   const rest = arr.slice(n).reduce((s,x) => s + x[1], 0);
   if(rest > 0) top.push(['Khác', rest]);
@@ -1007,7 +1087,11 @@ function buildTypeChart(data){
 }
 
 function buildProjectChart(data){
-  const top = topN(data,'c',12);
+  const top = topN(data,'cs',12);
+  const sum = top.reduce((s,x) => s + x[1], 0);
+  $('projTag').textContent = sum > data.length
+    ? `${fmt(sum)} lượt / ${fmt(data.length)} phiếu — 1 phiếu có thể thuộc nhiều công trình`
+    : 'Số phiếu';
   if(projectChart) projectChart.destroy();
   projectChart = new Chart($('projectChart'), {
     type:'bar',
@@ -1160,8 +1244,8 @@ function renderDetail(data){
   let rows = data;
   if(searchTerm){
     const q = deburr(searchTerm);
-    rows = data.filter(r => deburr([r.id,r.ten,r.khoi,r.u,r.l,r.pl,r.hm,r.c,r.dd,r.ly,
-                                    r.pt,r.bks,r.nguoi,r.ql,r.s].join(' ')).includes(q));
+    rows = data.filter(r => deburr([r.id,r.ten,r.khoi,r.u,r.l,r.pl,r.hmTxt,r.cTxt,r.dd,
+                                    r.ly,r.pt,r.bks,r.nguoi,r.ql,r.s].join(' ')).includes(q));
   }
   const sorted = [...rows].sort((a,b) => b.d.localeCompare(a.d));
   const show   = sorted.slice(0,200);
@@ -1174,15 +1258,19 @@ function renderDetail(data){
       ? `${r.gra || '—'} <span style="color:var(--text-faint)">→</span> ${r.gvao || '—'}`
       : '—';
     const tr = document.createElement('tr');
-    tr.title = [r.ten && ('Phiếu: '+r.ten), r.hm && ('Hạng mục: '+r.hm),
+    tr.title = [r.ten && ('Phiếu: '+r.ten), r.hmTxt && ('Hạng mục: '+r.hmTxt),
+                r.cs.length > 1 && ('Công trình: '+r.cTxt),
                 r.dd && ('Đến: '+r.dd), r.nguoi && ('Người ĐK: '+r.nguoi),
                 r.ql && ('Quản lý: '+r.ql), r.ly && ('Lý do: '+r.ly)]
                .filter(Boolean).join('\n');
+    const ctCell = r.cs.length > 1
+      ? `${r.cs[0]} <span class="tag" style="padding:1px 6px">+${r.cs.length-1}</span>`
+      : r.cTxt;
     tr.innerHTML = `
       <td class="mono">${dmy(r.d)}</td>
       <td>${r.u}</td>
       <td>${r.l}</td>
-      <td>${r.c}</td>
+      <td>${ctCell}</td>
       <td>${r.pt || '—'}</td>
       <td class="mono col-bks">${r.bks || '—'}</td>
       <td class="mono col-gio">${gio}</td>
@@ -1228,7 +1316,9 @@ async function loadData(){
     const t = LAST_SYNC.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});
     setStatus('ok',
       `Nguồn: <b>Google Sheet</b> · <b>${fmt(RECORDS.length)}</b> phiếu`
+      + (res.childInfo.length ? ` · ${res.childInfo.join(' · ')}` : '')
       + (SKIPPED ? ` · <span style="color:var(--amber)">${fmt(SKIPPED)} dòng bỏ qua</span>` : '')
+      + (res.childWarn.length ? ` · <span style="color:var(--amber)">không đọc được tab ${res.childWarn.join(', ')}</span>` : '')
       + ` · cập nhật lúc <b>${t}</b>`);
   }catch(err){
     setStatus('error', 'Lỗi kết nối Google Sheet');

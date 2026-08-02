@@ -48,8 +48,30 @@ Các cột phụ — có thì dùng, không có thì tự ẩn:
 | `gio_de_nghi_mang_ra` / `_mang_vao` | cột **Giờ ra → vào** trong bảng chi tiết |
 | `phieu_id`, `ten_phieu`, `hang_muc`, `dia_diem_den`, `nguoi_dieu_khien`, `quan_ly_phu_trach` | ô tìm kiếm + tooltip khi rê chuột vào dòng |
 
-Ba tab còn lại (`Công trình dự án`, `Hạng mục`, `Chi tiết hàng hóa`) là bảng con nối theo
-`phieu_id`, hiện **chưa dùng** — báo cáo lấy đủ dữ liệu từ tab chính.
+### Tab con nối theo `phieu_id`
+
+Trang đọc thêm 2 tab con để một phiếu có thể thuộc **nhiều** công trình / hạng mục:
+
+| Tab | Dùng ở đâu |
+|---|---|
+| `Công trình dự án` | bộ lọc Công trình, biểu đồ Top công trình, bảng chi tiết |
+| `Hạng mục` | tìm kiếm + tooltip |
+
+Cách hoạt động:
+
+- Phiếu **có** dòng ở tab con → lấy toàn bộ danh sách từ tab con.
+- Phiếu **không có** dòng nào → lùi về cột `cong_trinh_du_an` / `hang_muc` ở tab chính.
+- Tab con lỗi hoặc chưa có dữ liệu → cả báo cáo vẫn chạy bằng tab chính, thanh trạng thái
+  báo `không đọc được tab …`.
+
+Vì 1 phiếu có thể đếm vào nhiều công trình nên **tổng cột trong biểu đồ Top công trình có thể
+lớn hơn tổng số phiếu**. Khi điều đó xảy ra, nhãn biểu đồ tự ghi rõ `N lượt / M phiếu`. Bảng
+chi tiết hiển thị công trình đầu tiên kèm huy hiệu `+N`, rê chuột vào dòng để xem đủ.
+
+Tab `Chi tiết hàng hóa` (số lượng / khối lượng) hiện **chưa dùng**.
+
+Tên tab trong `CHILD_TABS` phải khớp **chính xác** với tên hiển thị dưới đáy Google Sheet.
+Đặt `USE_CHILD_TABS = false` để chỉ dùng tab chính.
 
 Bấm nút **"Cột dữ liệu"** trên trang để xem đang ghép cột nào với cột nào. Nếu sai, sửa
 `COLUMN_OVERRIDE`; để trống `''` thì trang tự dò theo từ khóa.
