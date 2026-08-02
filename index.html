@@ -286,6 +286,9 @@
 
   .hint-inline{font-size:11px;color:var(--text-faint);line-height:1.45;margin-top:2px;}
 
+  /* ẩn cột phụ nếu sheet không có cột tương ứng */
+  body.no-bks .col-bks, body.no-gio .col-gio{display:none;}
+
   @media (max-width:1080px){
     .kpi-grid{grid-template-columns:repeat(2,1fr);}
     .chart-row.two{grid-template-columns:1fr;}
@@ -323,6 +326,8 @@
     <span class="grp-label">Kỳ báo cáo</span>
     <select class="dd" id="monthFilter"><option value="all">Toàn bộ</option></select>
     <select class="dd" id="weekFilter"><option value="all">Cả tháng</option></select>
+    <span class="grp-label" id="khoiLabel" style="display:none">Khối</span>
+    <select class="dd" id="khoiFilter" style="display:none"><option value="all">Tất cả khối</option></select>
     <span class="grp-label">Đơn vị</span>
     <select class="dd" id="unitFilter"><option value="all">Tất cả đơn vị</option></select>
     <span class="grp-label">Công trình</span>
@@ -412,7 +417,7 @@
       <div class="chart-box"><canvas id="unitChart"></canvas></div>
     </div>
     <div class="panel">
-      <div class="panel-head"><h2>Theo loại hàng hóa</h2><span class="tag">Số phiếu</span></div>
+      <div class="panel-head"><h2>Theo loại hàng hóa</h2><span class="tag" id="typeTag">Số phiếu</span></div>
       <div class="chart-box"><canvas id="typeChart"></canvas></div>
     </div>
   </div>
@@ -465,6 +470,8 @@
             <th>Loại hàng hóa</th>
             <th>Công trình</th>
             <th>Phương tiện</th>
+            <th class="col-bks">Biển KS</th>
+            <th class="col-gio">Giờ ra → vào</th>
             <th>Trạng thái</th>
           </tr>
         </thead>
@@ -489,29 +496,52 @@ const SHEET_GID = '0';     // gid của tab chứa dữ liệu (xem trên URL: .
 // Tự động tải lại sau mỗi N phút. Đặt 0 để tắt.
 const AUTO_REFRESH_MINUTES = 10;
 
-/* Nếu tự nhận diện cột bị sai (xem nút "Cột dữ liệu" trên trang), điền
-   CHÍNH XÁC tên tiêu đề cột trong sheet vào đây để ghi đè. */
+/* Cột nào của sheet đổ vào trường nào của báo cáo. Đã khóa theo đúng tiêu đề
+   tab "Phiếu ra vào cổng". Để trống ('') thì trang tự dò theo từ khóa bên dưới. */
 const COLUMN_OVERRIDE = {
-  d : '',   // Ngày
-  u : '',   // Đơn vị đề nghị
-  l : '',   // Loại hàng hóa
-  c : '',   // Công trình / dự án
-  s : '',   // Trạng thái
-  pt: '',   // Phương tiện
-  ly: ''    // Lý do / mục đích
+  d : 'ngay_tao',           // Ngày
+  u : 'don_vi_de_nghi',     // Đơn vị đề nghị
+  l : 'loai_hang_hoa',      // Loại hàng hóa
+  c : 'cong_trinh_du_an',   // Công trình / dự án
+  s : 'trang_thai',         // Trạng thái
+  pt: 'phuong_tien',        // Phương tiện
+  ly: 'ly_do'               // Lý do / mục đích
 };
+
+/* Mốc thời gian dùng để xếp phiếu vào ngày/tuần/tháng trên báo cáo:
+     'd'   → ngay_tao            (ngày lập phiếu)
+     'gra' → gio_de_nghi_mang_ra (giờ đề nghị mang hàng ra cổng)  */
+const DATE_FIELD = 'd';
 
 /* Từ khóa dùng để tự nhận diện cột theo tên tiêu đề (không phân biệt hoa
    thường và dấu tiếng Việt). Thêm từ khóa vào đây nếu sheet đặt tên khác. */
 const FIELD_DEFS = [
-  { k:'d',  label:'Ngày',          kw:['ngay ra','ngay mang ra','ngay mang','ngay lap','ngay de nghi','ngay chung tu','ngay thang','thoi gian','ngay','date'] },
+  { k:'d',  label:'Ngày',          kw:['ngay tao','ngay ra','ngay mang ra','ngay mang','ngay lap','ngay de nghi','ngay chung tu','ngay thang','thoi gian','ngay','date'] },
   { k:'u',  label:'Đơn vị',        kw:['don vi de nghi','don vi yeu cau','don vi','bo phan','phong ban','to doi','unit','department','dept'] },
-  { k:'c',  label:'Công trình',    kw:['ma cong trinh','ten cong trinh','cong trinh','du an','ma ct','ma du an','project','job no'] },
+  { k:'c',  label:'Công trình',    kw:['cong trinh du an','ma cong trinh','ten cong trinh','cong trinh','du an','ma ct','ma du an','project','job no'] },
   { k:'s',  label:'Trạng thái',    kw:['trang thai','tinh trang','status','ket qua'] },
-  { k:'pt', label:'Phương tiện',   kw:['phuong tien','bien so','bien kiem soat','loai xe','so xe','vehicle','xe'] },
+  { k:'pt', label:'Phương tiện',   kw:['phuong tien','loai xe','so xe','vehicle'] },
   { k:'l',  label:'Loại hàng hóa', kw:['loai hang hoa','ten hang hoa','loai hang','ten hang','hang hoa','ten vat tu','vat tu','san pham','loai','hang'] },
-  { k:'ly', label:'Lý do',         kw:['ly do','muc dich','noi dung cong viec','noi dung','dien giai','mo ta','ghi chu','reason','note'] }
+  { k:'ly', label:'Lý do',         kw:['ly do','muc dich','noi dung cong viec','noi dung','dien giai','mo ta','reason','note'] }
 ];
+
+/* Các cột phụ — có thì dùng, không có thì bỏ qua. Dùng cho bảng chi tiết,
+   ô tìm kiếm và bộ lọc Khối. */
+const EXTRA_DEFS = [
+  { k:'id',    label:'Mã phiếu',           kw:['phieu id','ma phieu','so phieu'] },
+  { k:'ten',   label:'Tên phiếu',          kw:['ten phieu'] },
+  { k:'khoi',  label:'Khối',               kw:['khoi hien tai','khoi'] },
+  { k:'hm',    label:'Hạng mục',           kw:['hang muc'] },
+  { k:'dd',    label:'Địa điểm đến',       kw:['dia diem den','dia diem','noi den'] },
+  { k:'bks',   label:'Biển kiểm soát',     kw:['bien kiem soat','bien so'] },
+  { k:'nguoi', label:'Người điều khiển',   kw:['nguoi dieu khien','lai xe','tai xe'] },
+  { k:'gra',   label:'Giờ mang ra',        kw:['gio de nghi mang ra','gio mang ra','gio ra'] },
+  { k:'gvao',  label:'Giờ mang vào',       kw:['gio de nghi mang vao','gio mang vao','gio vao'] },
+  { k:'pl',    label:'Phân loại hàng hóa', kw:['phan loai hang hoa','phan loai'] },
+  { k:'ql',    label:'Quản lý phụ trách',  kw:['quan ly phu trach','quan ly'] }
+];
+
+const ALL_DEFS = FIELD_DEFS.concat(EXTRA_DEFS);
 
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit#gid=${SHEET_GID}`;
 
@@ -533,11 +563,25 @@ function deburr(s){
     .trim();
 }
 
+/** Lấy giờ 'HH:MM' trong một ô bất kỳ (vd '09:00 30/07/2026'). '' nếu không có. */
+function hhmm(v){
+  if(v==null) return '';
+  const s = String(v);
+  let m = s.match(/^Date\(\d+,\d+,\d+,(\d+),(\d+)/);          // Date(y,m,d,H,M,S)
+  if(m) return `${pad2(m[1])}:${pad2(m[2])}`;
+  m = s.match(/(\d{1,2}):(\d{2})/);
+  return m ? `${pad2(m[1])}:${m[2]}` : '';
+}
+
 /** Chuẩn hóa mọi kiểu ngày về 'YYYY-MM-DD'. Trả null nếu không đọc được. */
 function parseDate(v){
   if(v==null || v==='') return null;
   if(v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad2(v.getMonth()+1)}-${pad2(v.getDate())}`;
-  const s = String(v).trim();
+  // Bỏ phần giờ đứng trước/sau ngày: '09:00 30/07/2026', '30/07/2026 09:00'
+  const s = String(v).trim()
+    .replace(/^\d{1,2}:\d{2}(:\d{2})?\s+/, '')
+    .replace(/\s+\d{1,2}:\d{2}(:\d{2})?$/, '')
+    .trim();
   let m;
   // Định dạng gviz trả về: Date(2026,6,1) — tháng đếm từ 0
   if((m = s.match(/^Date\((\d+),(\d+),(\d+)/))) return `${m[1]}-${pad2(+m[2]+1)}-${pad2(+m[3])}`;
@@ -643,14 +687,14 @@ function detectColumns(headers){
   const taken = new Set();
 
   // Ưu tiên tuyệt đối cho phần ghi đè thủ công
-  for(const f of FIELD_DEFS){
+  for(const f of ALL_DEFS){
     const want = (COLUMN_OVERRIDE[f.k] || '').trim();
     if(!want) continue;
     const i = norm.indexOf(deburr(want));
     if(i >= 0){ map[f.k] = i; taken.add(i); }
   }
 
-  for(const f of FIELD_DEFS){
+  for(const f of ALL_DEFS){
     if(map[f.k] != null) continue;
     let found = -1;
     // vòng 1: trùng khớp tuyệt đối, vòng 2: chứa từ khóa
@@ -675,9 +719,14 @@ function gridToRecords(grid, map){
   const out = [];
   let skipped = 0;
 
+  // Mốc thời gian xếp lịch: ưu tiên DATE_FIELD, thiếu thì lùi về cột còn lại
+  const dateKeys = (DATE_FIELD === 'gra' ? ['gra','d'] : ['d','gra'])
+                   .filter(k => map[k] != null);
+
   for(const row of grid.rows){
     if(!row.some(c => String(c==null?'':c).trim() !== '')) continue;   // dòng trống
-    const d = parseDate(map.d == null ? '' : row[map.d]);
+    let d = null;
+    for(const k of dateKeys){ d = parseDate(row[map[k]]); if(d) break; }
     if(!d){ skipped++; continue; }                                     // không có ngày hợp lệ
     out.push({
       d,
@@ -688,7 +737,19 @@ function gridToRecords(grid, map){
       c : get(row,'c')  || 'Không rõ',
       s : get(row,'s')  || 'Đang xử lý',
       pt: get(row,'pt'),
-      ly: get(row,'ly')
+      ly: get(row,'ly'),
+      // cột phụ (rỗng nếu sheet không có)
+      id   : get(row,'id'),
+      ten  : get(row,'ten'),
+      khoi : get(row,'khoi') || 'Không rõ',
+      hm   : get(row,'hm'),
+      dd   : get(row,'dd'),
+      bks  : get(row,'bks'),
+      nguoi: get(row,'nguoi'),
+      gra  : hhmm(map.gra  == null ? '' : row[map.gra]),
+      gvao : hhmm(map.gvao == null ? '' : row[map.gvao]),
+      pl   : get(row,'pl') || get(row,'l') || 'Không rõ',
+      ql   : get(row,'ql')
     });
   }
   out.sort((a,b) => a.d.localeCompare(b.d));
@@ -723,7 +784,7 @@ async function fetchSheet(){
   }
 
   if(!best) throw (lastErr || new Error('Không đọc được dữ liệu từ sheet.'));
-  if(best.map.d == null)
+  if(best.map.d == null && best.map.gra == null)
     throw new Error('Không tìm thấy cột NGÀY trong sheet. Các tiêu đề đọc được: '
       + best.grid.headers.filter(Boolean).join(' | '));
   if(!best.records.length)
@@ -741,7 +802,7 @@ let HEADERS  = [];
 let SKIPPED  = 0;
 let LAST_SYNC= null;
 
-const state = { month:'all', week:'all', unit:'all', project:'all', status:'all' };
+const state = { month:'all', week:'all', khoi:'all', unit:'all', project:'all', status:'all' };
 let searchTerm = '';
 let firstLoad  = true;
 
@@ -781,15 +842,17 @@ function showError(err){
 const clearError = () => { $('errBox').style.display = 'none'; };
 
 function renderMapBox(){
-  const rows = FIELD_DEFS.map(f => {
+  const line = (f, core) => {
     const i  = COLMAP[f.k];
     const ok = i != null;
     return `<tr>
-      <td><b>${f.label}</b></td>
-      <td>${ok ? HEADERS[i] : '<span class="miss">— không tìm thấy —</span>'}</td>
+      <td><b>${f.label}</b>${core ? '' : ' <span style="color:var(--text-faint)">(phụ)</span>'}</td>
+      <td>${ok ? HEADERS[i] : `<span class="${core?'miss':''}" style="${core?'':'color:var(--text-faint)'}">— không có —</span>`}</td>
       <td class="mono">${ok ? 'cột '+(i+1) : ''}</td>
     </tr>`;
-  }).join('');
+  };
+  const rows = FIELD_DEFS.map(f => line(f,true)).join('')
+             + EXTRA_DEFS.map(f => line(f,false)).join('');
   $('mapBox').innerHTML = `
     <table>
       <thead><tr><th>Trường trên báo cáo</th><th>Cột trong Google Sheet</th><th>Vị trí</th></tr></thead>
@@ -843,6 +906,12 @@ function populateFilters(){
   state.month = fillSelect($('monthFilter'), months.map(m => [m, monthLabel(m)]),
                            'Toàn bộ thời gian', firstLoad ? months[0] : null);
   populateWeekFilter();
+  // Bộ lọc Khối chỉ hiện khi sheet có cột khoi_hien_tai
+  const hasKhoi = COLMAP.khoi != null;
+  $('khoiFilter').style.display = $('khoiLabel').style.display = hasKhoi ? '' : 'none';
+  state.khoi = hasKhoi
+    ? fillSelect($('khoiFilter'), byFrequency('khoi', RECORDS).map(v=>[v,v]), 'Tất cả khối')
+    : 'all';
   state.unit    = fillSelect($('unitFilter'),    byFrequency('u', RECORDS).map(v=>[v,v]), 'Tất cả đơn vị');
   state.project = fillSelect($('projectFilter'), byFrequency('c', RECORDS).map(v=>[v,v]), 'Tất cả công trình');
   state.status  = fillSelect($('statusFilter'),  byFrequency('s', RECORDS).map(v=>[v,v]), 'Tất cả');
@@ -853,6 +922,7 @@ function getFiltered(){
   return RECORDS.filter(r =>
        (state.month  === 'all' || r.m === state.month)
     && (state.week   === 'all' || r.w === state.week)
+    && (state.khoi   === 'all' || r.khoi === state.khoi)
     && (state.unit   === 'all' || r.u === state.unit)
     && (state.project=== 'all' || r.c === state.project)
     && (state.status === 'all' || r.s === state.status));
@@ -919,7 +989,11 @@ function buildUnitChart(data){
 }
 
 function buildTypeChart(data){
-  const top = topN(data,'l',7);
+  // Ưu tiên phan_loai_hang_hoa (danh mục chuẩn) — loai_hang_hoa là chữ tự do
+  // nên vẽ tròn sẽ vụn. Không có cột phân loại thì quay về loai_hang_hoa.
+  const useField = COLMAP.pl != null ? 'pl' : 'l';
+  $('typeTag').textContent = 'Theo ' + (useField === 'pl' ? 'phan_loai_hang_hoa' : 'loai_hang_hoa');
+  const top = topN(data, useField, 7);
   const palette = ['#3B82F6','#F2A93B','#34D399','#8b6bf0','#F26161','#4ecdc4','#e096d0','#5B6D8C'];
   if(typeChart) typeChart.destroy();
   typeChart = new Chart($('typeChart'), {
@@ -1086,7 +1160,8 @@ function renderDetail(data){
   let rows = data;
   if(searchTerm){
     const q = deburr(searchTerm);
-    rows = data.filter(r => deburr(r.u+' '+r.c+' '+r.ly+' '+r.l+' '+r.pt+' '+r.s).includes(q));
+    rows = data.filter(r => deburr([r.id,r.ten,r.khoi,r.u,r.l,r.pl,r.hm,r.c,r.dd,r.ly,
+                                    r.pt,r.bks,r.nguoi,r.ql,r.s].join(' ')).includes(q));
   }
   const sorted = [...rows].sort((a,b) => b.d.localeCompare(a.d));
   const show   = sorted.slice(0,200);
@@ -1095,13 +1170,22 @@ function renderDetail(data){
     : 'Không có phiếu phù hợp';
 
   show.forEach(r => {
+    const gio = r.gra || r.gvao
+      ? `${r.gra || '—'} <span style="color:var(--text-faint)">→</span> ${r.gvao || '—'}`
+      : '—';
     const tr = document.createElement('tr');
+    tr.title = [r.ten && ('Phiếu: '+r.ten), r.hm && ('Hạng mục: '+r.hm),
+                r.dd && ('Đến: '+r.dd), r.nguoi && ('Người ĐK: '+r.nguoi),
+                r.ql && ('Quản lý: '+r.ql), r.ly && ('Lý do: '+r.ly)]
+               .filter(Boolean).join('\n');
     tr.innerHTML = `
       <td class="mono">${dmy(r.d)}</td>
       <td>${r.u}</td>
       <td>${r.l}</td>
       <td>${r.c}</td>
       <td>${r.pt || '—'}</td>
+      <td class="mono col-bks">${r.bks || '—'}</td>
+      <td class="mono col-gio">${gio}</td>
       <td>${statusChip(r.s)}</td>`;
     tbody.appendChild(tr);
   });
@@ -1135,6 +1219,8 @@ async function loadData(){
     HEADERS = res.grid.headers;
     SKIPPED = res.skipped;
     LAST_SYNC = new Date();
+    document.body.classList.toggle('no-bks', COLMAP.bks == null);
+    document.body.classList.toggle('no-gio', COLMAP.gra == null && COLMAP.gvao == null);
     clearError();
     renderMapBox();
     populateFilters();
@@ -1169,6 +1255,7 @@ $('weekFilter').addEventListener('change', e => {
   $('actualInput').value = '';
   renderAll();
 });
+$('khoiFilter').addEventListener('change',    e => { state.khoi    = e.target.value; renderAll(); });
 $('unitFilter').addEventListener('change',    e => { state.unit    = e.target.value; renderAll(); });
 $('projectFilter').addEventListener('change', e => { state.project = e.target.value; renderAll(); });
 $('statusFilter').addEventListener('change',  e => { state.status  = e.target.value; renderAll(); });

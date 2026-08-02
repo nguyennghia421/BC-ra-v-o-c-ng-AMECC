@@ -24,29 +24,49 @@ Mở `index.html`, sửa phần đầu thẻ `<script>`:
 | `AUTO_REFRESH_MINUTES` | Tự tải lại sau N phút (mặc định 10, đặt `0` để tắt) |
 | `COLUMN_OVERRIDE` | Chỉ định tay tên cột nếu tự nhận diện sai |
 
-## Ghép cột tự động
+## Ghép cột
 
-Trang tự dò cột theo **tên tiêu đề** (không phân biệt hoa thường và dấu), nên thêm/bớt/đổi
-thứ tự cột trong sheet vẫn chạy đúng. Các trường cần có:
+Đã khóa sẵn theo tab **"Phiếu ra vào cổng"** (18 cột). Bảng ghép:
 
-| Trường | Từ khóa tiêu đề nhận diện được |
+| Trường trên báo cáo | Cột sheet | Dùng ở đâu |
+|---|---|---|
+| Ngày | `ngay_tao` | trục thời gian, bộ lọc tháng/tuần, KPI |
+| Đơn vị | `don_vi_de_nghi` | KPI, biểu đồ Top đơn vị, bảng đối soát |
+| Công trình | `cong_trinh_du_an` | bộ lọc, biểu đồ Top công trình |
+| Trạng thái | `trang_thai` | KPI Hoàn thành / Đang xử lý / Từ chối |
+| Phương tiện | `phuong_tien` | bảng chi tiết |
+| Loại hàng hóa | `loai_hang_hoa` | bảng chi tiết |
+| Lý do | `ly_do` | tìm kiếm, tooltip |
+
+Các cột phụ — có thì dùng, không có thì tự ẩn:
+
+| Cột sheet | Dùng ở đâu |
 |---|---|
-| Ngày *(bắt buộc)* | ngày mang ra, ngày lập, ngày đề nghị, thời gian, ngày… |
-| Đơn vị | đơn vị đề nghị, đơn vị, bộ phận, phòng ban… |
-| Công trình | mã công trình, công trình, dự án, mã CT… |
-| Trạng thái | trạng thái, tình trạng, kết quả… |
-| Phương tiện | phương tiện, biển số, loại xe… |
-| Loại hàng hóa | loại hàng hóa, tên hàng, vật tư, sản phẩm… |
-| Lý do | lý do, mục đích, nội dung, diễn giải, ghi chú… |
+| `khoi_hien_tai` | bộ lọc **Khối** |
+| `phan_loai_hang_hoa` | biểu đồ tròn "Theo loại hàng hóa" (thay `loai_hang_hoa` vì đây là danh mục chuẩn, không phải chữ tự do) |
+| `bien_kiem_soat` | cột **Biển KS** trong bảng chi tiết |
+| `gio_de_nghi_mang_ra` / `_mang_vao` | cột **Giờ ra → vào** trong bảng chi tiết |
+| `phieu_id`, `ten_phieu`, `hang_muc`, `dia_diem_den`, `nguoi_dieu_khien`, `quan_ly_phu_trach` | ô tìm kiếm + tooltip khi rê chuột vào dòng |
 
-Bấm nút **"Cột dữ liệu"** trên trang để xem đang ghép cột nào với cột nào. Nếu sai, điền tên
-cột chính xác vào `COLUMN_OVERRIDE`.
+Ba tab còn lại (`Công trình dự án`, `Hạng mục`, `Chi tiết hàng hóa`) là bảng con nối theo
+`phieu_id`, hiện **chưa dùng** — báo cáo lấy đủ dữ liệu từ tab chính.
+
+Bấm nút **"Cột dữ liệu"** trên trang để xem đang ghép cột nào với cột nào. Nếu sai, sửa
+`COLUMN_OVERRIDE`; để trống `''` thì trang tự dò theo từ khóa.
+
+### Đổi mốc thời gian
+
+Hằng số `DATE_FIELD` quyết định phiếu được xếp vào ngày nào:
+
+- `'d'` *(đang dùng)* → `ngay_tao`, ngày lập phiếu
+- `'gra'` → `gio_de_nghi_mang_ra`, giờ đề nghị mang hàng ra cổng
 
 Nếu sheet có dòng tiêu đề gộp ô phía trên bảng, trang tự thử lần lượt `headers=1..4` để tìm
 đúng dòng tiêu đề.
 
-**Ngày** đọc được các định dạng: ô kiểu Date của Google Sheet, `dd/mm/yyyy`, `dd-mm-yy`,
-`yyyy-mm-dd`. Dòng không có ngày hợp lệ bị bỏ qua và được đếm hiển thị trên thanh trạng thái.
+**Ngày** đọc được các định dạng: ô kiểu Date/DateTime của Google Sheet, `dd/mm/yyyy`,
+`dd-mm-yy`, `yyyy-mm-dd`, và dạng có kèm giờ như `09:00 30/07/2026`. Dòng không có ngày hợp
+lệ bị bỏ qua và được đếm hiển thị trên thanh trạng thái.
 
 **Trạng thái** giữ nguyên chữ trong sheet ở bảng chi tiết, đồng thời tự quy về 3 nhóm để
 tính KPI:
