@@ -3,7 +3,7 @@
 Dashboard HTML đọc **trực tiếp** dữ liệu từ Google Sheet mỗi lần mở trang. Không còn số liệu demo.
 
 - **File duy nhất:** `index.html` — mở bằng trình duyệt là chạy, không cần cài đặt, không cần server.
-- **Nguồn:** Google Sheet `1kI8W1hJGHu-lwvm0hlwjqHWBIBuqlaA_XDdRHp4x1LE`, tab `gid=0`.
+- **Nguồn:** Google Sheet `1Y2PzDgiw4NRXyHt10_gkGWL27YrdA3F1sk-9AoxPZik`, tab `gid=0`.
 
 ## Điều kiện bắt buộc
 
