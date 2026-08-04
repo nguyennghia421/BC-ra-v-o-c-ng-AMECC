@@ -6,6 +6,7 @@
 <title>Báo cáo phiếu mang hàng hóa ra công ty — AMECC</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
   :root{
     --bg: #EEF1F6;
     --panel: #FFFFFF;
@@ -21,9 +22,9 @@
     --blue-dim: #E7EEFC;
     --amber: #E8A33D;
     --amber-dim: #FBF1DE;
-    --green: #1F9D63;
+    --green: #2E7D54;
     --green-dim: #E5F5EC;
-    --red: #E5484D;
+    --red: #D2564A;
     --red-dim: #FBE9EA;
     --purple: #7C5CF0;
     --cyan: #17A2B8;
@@ -34,12 +35,12 @@
   body{
     background:var(--bg);
     color:var(--text);
-    font-family:"Segoe UI",Arial,"Helvetica Neue",Helvetica,sans-serif;
+    font-family:"Inter",sans-serif;
     -webkit-font-smoothing:antialiased;
     min-height:100vh;
   }
-  .mono{font-family:"Segoe UI",Arial,"Helvetica Neue",Helvetica,sans-serif;}
-  .display{font-family:"Segoe UI",Arial,"Helvetica Neue",Helvetica,sans-serif;}
+  .mono{font-family:"Archivo","Inter",sans-serif;}
+  .display{font-family:"Archivo","Inter",sans-serif;}
 
   .wrap{
     max-width:1500px;margin:0 auto;padding:14px 22px 30px;
@@ -69,7 +70,7 @@
   .filter-row .grp-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:rgba(255,255,255,.55);margin-right:2px;font-weight:700;}
   select.dd{
     background:#FFFFFF; border:1px solid rgba(255,255,255,.4); color:var(--text);
-    font-size:12px; padding:6px 10px; border-radius:7px; font-family:"Segoe UI",Arial,sans-serif;
+    font-size:12px; padding:6px 10px; border-radius:7px; font-family:"Inter",sans-serif;
     cursor:pointer;
   }
 
@@ -92,7 +93,7 @@
   .kpi .value{font-size:24px;font-weight:700;line-height:1;color:var(--text);}
   .kpi .foot{font-size:10.5px;color:var(--text-faint);margin-top:6px;}
   .kpi .foot b{color:var(--text-dim);}
-  .kpi .delta{font-weight:700;}
+  .kpi .delta{font-family:"Inter",sans-serif;font-weight:600;line-height:1.45;}
   .kpi .delta.up{color:var(--green);}
   .kpi .delta.down{color:var(--red);}
   .kpi .delta.flat{color:var(--text-faint);font-weight:600;}
@@ -141,7 +142,7 @@
   .gate-input-block label{font-size:12px;color:var(--text-dim);white-space:nowrap;}
   .gate-input-block input{
     background:#FFFFFF; border:1.5px solid var(--amber); color:#B5730F;
-    padding:6px 12px; border-radius:7px; font-family:"Segoe UI",Arial,sans-serif;
+    padding:6px 12px; border-radius:7px; font-family:"Inter",sans-serif;
     font-size:21px; font-weight:700; width:100%;
   }
   .gate-input-block input:focus{outline:none;box-shadow:0 0 0 3px var(--amber-dim);}
@@ -656,12 +657,12 @@ function renderKPIs(data){
 /* So sánh với tuần liền trước (theo tuần lịch ISO thật). Cùng áp dụng các bộ
    lọc đơn vị/công trình/trạng thái đang chọn để so sánh đúng "táo với táo". */
 function deltaHTML(curr, prev, opts={}){
-  const { unit='', decimals=0, flip=false, isPct=false } = opts;
+  const { unit='', decimals=0, isPct=false } = opts;
   const eps = decimals>0 ? 0.05 : 0.5;
   const diff = curr - prev;
   if(Math.abs(diff) < eps) return `<span class="delta flat">● Không đổi so với tuần trước</span>`;
   const up = diff > 0;
-  const cls = (flip ? !up : up) ? 'up' : 'down';
+  const cls = up ? 'up' : 'down';
   const arrow = up ? '▲' : '▼';
   const diffTxt = (up?'+':'') + diff.toFixed(decimals) + unit;
   const pctTxt = (!isPct && prev>0) ? ` (${diff/prev*100>=0?'+':''}${(diff/prev*100).toFixed(1)}%)` : '';
@@ -700,7 +701,7 @@ function renderKPIDeltas(curr){
 
   els.total.innerHTML   = deltaHTML(curr.total, pTotal);
   els.done.innerHTML    = deltaHTML(curr.done, pDone);
-  els.pending.innerHTML = deltaHTML(curr.pending, pPending, {flip:true});
+  els.pending.innerHTML = deltaHTML(curr.pending, pPending);
   els.rate.innerHTML    = deltaHTML(curr.rate, pRate, {unit:' đpt', decimals:1, isPct:true});
   els.avg.innerHTML     = deltaHTML(curr.avg, pAvg, {decimals:1});
 }
