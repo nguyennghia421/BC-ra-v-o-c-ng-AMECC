@@ -217,6 +217,32 @@
   .err-box ol{margin:8px 0 0 18px;padding:0;line-height:1.6;}
   .err-box code{background:#FFFFFF;padding:1px 5px;border-radius:4px;font-size:11.5px;}
 
+  /* ---------- Ô nhập gid ngay trên trang khi chưa nối được tab ---------- */
+  .gid-form{
+    background:#FFFFFF;border:1px solid var(--line);border-radius:9px;
+    padding:12px 16px;margin-top:12px;color:var(--text);
+  }
+  .gid-form-title{font-size:13px;font-weight:700;margin-bottom:5px;color:var(--text);}
+  .gid-form-help{font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;}
+  .gid-row{display:flex;align-items:center;gap:10px;margin-bottom:7px;flex-wrap:wrap;}
+  .gid-row label{font-size:12px;color:var(--text-dim);min-width:170px;}
+  .gid-row input{
+    flex:1;min-width:220px;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:7px;padding:6px 10px;font-size:12.5px;font-family:"Inter",sans-serif;color:var(--text);
+  }
+  .gid-row input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-dim);}
+  .gid-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;}
+  .gid-btn{
+    background:var(--blue);color:#FFFFFF;border:none;border-radius:7px;
+    padding:7px 16px;font-size:12.5px;font-weight:600;font-family:"Inter",sans-serif;cursor:pointer;
+  }
+  .gid-btn:hover{background:#1B4FBF;}
+  .gid-reset{
+    background:transparent;border:1px solid var(--line);color:var(--text-dim);
+    border-radius:7px;padding:6px 12px;font-size:11.5px;font-family:"Inter",sans-serif;cursor:pointer;
+  }
+  .gid-note{font-size:10.5px;color:var(--text-faint);font-style:italic;}
+
   /* ---------- Thanh bộ lọc chéo (cross-filter kiểu Power BI) ---------- */
   .xf-bar{
     display:flex;align-items:center;gap:8px;flex-wrap:wrap;
@@ -473,6 +499,26 @@ const PROJECT_TAB = {
    tab nào qua tiêu đề cột, nên đoán sai cũng không sinh số sai: tab không khớp
    sẽ bị loại chứ không được dùng. Thêm gid vào đây nếu bạn không chắc. */
 const CANDIDATE_GIDS = ['1557802886'];
+
+/* Chưa biết gid thì không phải sửa file: nhập thẳng trên trang ở hộp báo lỗi,
+   trang ghi nhớ trong localStorage của máy bạn cho những lần mở sau. */
+const GID_STORE = 'amecc_gid_' + SHEET_ID;
+function readStoredGids(){
+  try{ return JSON.parse(localStorage.getItem(GID_STORE)) || {}; }catch(e){ return {}; }
+}
+function writeStoredGids(o){
+  try{ localStorage.setItem(GID_STORE, JSON.stringify(o)); }catch(e){}
+}
+/** Nhận cả gid trần (1557802886) lẫn cả đường link dán nguyên. */
+function parseGid(s){
+  const m = String(s||'').match(/(?:gid=)?(\d{5,})/);
+  return m ? m[1] : '';
+}
+(function applyStoredGids(){
+  const g = readStoredGids();
+  if(g.main) MAIN_TAB.gid    = g.main;
+  if(g.proj) PROJECT_TAB.gid = g.proj;
+})();
 
 const AUTO_REFRESH_MINUTES = 10;     // tự tải lại sau N phút; 0 = tắt
 const DATE_FIELD  = 'd';             // 'd' = ngay_tao · 'gra' = giờ đề nghị mang ra
@@ -793,25 +839,37 @@ async function loadTab(cfg, verify, headerRows){
   if(cfg.sheet) attempts.push({ by:'tên tab', params:{ sheet: cfg.sheet } });
   if(!attempts.length) throw new Error('Chưa cấu hình gid lẫn tên cho tab "'+cfg.label+'".');
 
-  let lastGrid = null, lastErr = null;
+  const rows = headerRows || [1];
+  const tried = [];              // nhật ký từng lần thử, để báo lỗi cho ra hồn
+  let lastErr = null;
+
   for(const a of attempts){
-    for(const hr of (headerRows || [1])){
+    for(const hr of rows){
       let grid;
       try{
         grid = tableToGrid(await loadGviz(Object.assign({}, a.params, { headers: hr })));
-      }catch(e){ lastErr = e; continue; }
-      if(!grid.headers.length && !grid.rows.length) continue;
-      lastGrid = grid;
+      }catch(e){
+        lastErr = e;
+        if(hr === rows[0]) tried.push({ by:a.by, got:'lỗi: ' + e.message });
+        continue;
+      }
+      if(!grid.headers.length && !grid.rows.length){
+        if(hr === rows[0]) tried.push({ by:a.by, got:'bảng rỗng' });
+        continue;
+      }
+      // Chỉ ghi nhật ký ở headers=1: các mức cao hơn gộp mấy dòng đầu vào tên
+      // cột nên tiêu đề đọc ra rất khó nhìn, không hợp để đưa vào báo lỗi.
+      if(hr === rows[0]) tried.push({ by:a.by, got:grid.headers.filter(Boolean).join(', ') });
       if(verify(grid.headers)) return { grid, by:a.by, headerRows:hr };
     }
   }
-  if(lastErr && !lastGrid) throw lastErr;
+  if(lastErr && !tried.some(t => !/^lỗi:/.test(t.got))) throw lastErr;
+
   const err = new Error(
-    `Đọc nhầm tab: gọi tab "${cfg.label}" nhưng Google trả về bảng có các cột `
-    + `«${(lastGrid ? lastGrid.headers : []).filter(Boolean).join(' | ')}».`
-    + (cfg.gid ? '' : ` Nguyên nhân thường gặp: tab Connected Sheets không tra được bằng TÊN. Hãy điền gid của tab "${cfg.label}" vào phần cấu hình đầu file.`));
+    `Chưa tìm được tab "${cfg.label}". Đã thử ${tried.length} cách, không cách nào ra đúng bảng cần tìm:`
+    + tried.map(t => ` • gọi bằng ${t.by} → ${t.got}`).join(''));
   err.wrongTab = true;
-  err.headersRead = lastGrid ? lastGrid.headers : [];
+  err.tried = tried;
   throw err;
 }
 
@@ -925,22 +983,60 @@ function showError(err){
   const box = $('errBox');
   box.style.display = '';
   const wrongTab = err && err.wrongTab;
+  const g = readStoredGids();
   box.innerHTML = `
     <h3>⚠ Không tải được dữ liệu từ Google Sheet</h3>
-    <div>${esc(err && err.message || err)}</div>
+    <div>${esc(err && err.message || err)}</div>` + (wrongTab ? `
+    <div class="gid-form">
+      <div class="gid-form-title">Chỉ cho trang biết 2 tab nằm ở đâu</div>
+      <div class="gid-form-help">
+        Mở Google Sheet → bấm vào tab <b>${esc(MAIN_TAB.label)}</b> → nhìn thanh địa chỉ,
+        đoạn <code>#gid=<b>1234567</b></code> ở cuối chính là số cần lấy.
+        Dán cả đường link cũng được, trang tự bóc số ra. Làm tương tự với tab
+        <b>${esc(PROJECT_TAB.label)}</b>.
+      </div>
+      <div class="gid-row">
+        <label>gid tab <b>${esc(MAIN_TAB.label)}</b></label>
+        <input type="text" id="gidMain" placeholder="vd 1557802886 hoặc dán cả link" value="${esc(g.main||'')}">
+      </div>
+      <div class="gid-row">
+        <label>gid tab <b>${esc(PROJECT_TAB.label)}</b></label>
+        <input type="text" id="gidProj" placeholder="vd 987654321 hoặc dán cả link" value="${esc(g.proj||'')}">
+      </div>
+      <div class="gid-actions">
+        <button class="gid-btn" id="gidApply">Kết nối lại</button>
+        <button class="gid-reset" id="gidReset">Xóa gid đã lưu</button>
+        <span class="gid-note">Số này lưu trên máy bạn, không gửi đi đâu.</span>
+      </div>
+    </div>` : '') + `
     <ol>` + (wrongTab ? `
-      <li><b>Cần điền <code>gid</code>.</b> Mở Google Sheet → bấm vào tab
-          <code>${esc(MAIN_TAB.label)}</code> → sao chép dãy số sau <code>#gid=</code> trên thanh địa chỉ
-          → dán vào <code>MAIN_TAB.gid</code> ở đầu thẻ <code>&lt;script&gt;</code> của file này.
-          Làm tương tự cho tab <code>${esc(PROJECT_TAB.label)}</code> → <code>PROJECT_TAB.gid</code>.</li>
       <li>Các tab dạng <b>Connected Sheets</b> (có biểu tượng ⛁ và nút "Làm mới các tùy chọn")
-          không tra được bằng tên tab, bắt buộc dùng <code>gid</code>.</li>` : `
-      <li>Mở sheet → <b>Chia sẻ</b> → <b>Bất kỳ ai có đường liên kết</b> → quyền <b>Người xem</b>.</li>
-      <li>Kiểm tra <code>gid</code> / tên tab <code>${esc(MAIN_TAB.label)}</code> và
-          <code>${esc(PROJECT_TAB.label)}</code> ở đầu thẻ <code>&lt;script&gt;</code>.</li>`) + `
+          không tra được bằng tên tab, bắt buộc dùng <code>gid</code>.</li>
+      <li>Nếu điền đúng gid mà vẫn báo đọc nhầm tab, nghĩa là Google không cho đọc trực tiếp
+          bảng Connected Sheets. Khi đó bấm nút <b>Giải nén</b> trên tab đó để tạo một tab
+          thường chứa cùng dữ liệu, rồi lấy <code>gid</code> của tab vừa tạo.</li>` : `
+      <li>Mở sheet → <b>Chia sẻ</b> → <b>Bất kỳ ai có đường liên kết</b> → quyền <b>Người xem</b>.</li>`) + `
       <li>Nếu mạng công ty chặn <code>docs.google.com</code>, mở trang bằng mạng khác.</li>
       <li>Bấm <b>⟳ Làm mới</b> để thử lại.</li>
     </ol>`;
+
+  if(wrongTab){
+    $('gidApply').addEventListener('click', () => {
+      const main = parseGid($('gidMain').value);
+      const proj = parseGid($('gidProj').value);
+      if(!main && !proj){ alert('Chưa nhập gid nào. Cần ít nhất gid của tab ' + MAIN_TAB.label + '.'); return; }
+      writeStoredGids({ main, proj });
+      if(main) MAIN_TAB.gid    = main;
+      if(proj) PROJECT_TAB.gid = proj;
+      loadData();
+    });
+    $('gidReset').addEventListener('click', () => {
+      writeStoredGids({});
+      MAIN_TAB.gid = PROJECT_TAB.gid = '';
+      $('gidMain').value = $('gidProj').value = '';
+      loadData();
+    });
+  }
 }
 const clearError = () => { $('errBox').style.display = 'none'; };
 
