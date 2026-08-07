@@ -484,21 +484,22 @@ const SHEET_ID = '1Y2PzDgiw4NRXyHt10_gkGWL27YrdA3F1sk-9AoxPZik';
    tra được bằng tên — Google Visualization API không khớp được tên rồi âm thầm
    trả về TAB ĐẦU TIÊN của file thay vì báo lỗi. Điền gid là cách chắc chắn. */
 const MAIN_TAB = {
-  gid   : '',            // ← ĐIỀN gid CỦA TAB "Phiếu xe" VÀO ĐÂY
-  sheet : 'Phiếu xe',    // chỉ dùng để thử khi chưa có gid
+  gid   : '1557802886',  // tab "Phiếu xe"
+  sheet : 'Phiếu xe',    // chỉ dùng để thử khi gid không ra kết quả
   label : 'Phiếu xe'
 };
 const PROJECT_TAB = {
-  gid   : '',            // ← ĐIỀN gid CỦA TAB "PX_Dự án" VÀO ĐÂY
+  gid   : '104775226',   // tab "PX_Dự án"
   sheet : 'PX_Dự án',
   label : 'PX_Dự án',
   valueKw:['cong trinh du an','ten du an','ma du an','cong trinh','du an','project']
 };
 
 /* Các gid chưa rõ thuộc tab nào — trang thử lần lượt rồi tự nhận ra tab nào là
-   tab nào qua tiêu đề cột, nên đoán sai cũng không sinh số sai: tab không khớp
-   sẽ bị loại chứ không được dùng. Thêm gid vào đây nếu bạn không chắc. */
-const CANDIDATE_GIDS = ['1557802886'];
+   tab nào qua tiêu đề cột, nên xếp nhầm cũng không sinh số sai: tab không khớp
+   sẽ bị loại chứ không được dùng. Thêm gid vào đây nếu bạn không chắc, ví dụ
+   gid của tab "Giải nén" tạo ra từ Connected Sheets. */
+const CANDIDATE_GIDS = ['1557802886', '104775226'];
 
 /* Chưa biết gid thì không phải sửa file: nhập thẳng trên trang ở hộp báo lỗi,
    trang ghi nhớ trong localStorage của máy bạn cho những lần mở sau. */
@@ -812,12 +813,13 @@ function gridToRecords(grid, map){
    Nên mọi tab đọc về đều phải qua cửa kiểm tra dưới đây. ─────────────────── */
 function tabFingerprint(headers){ return headers.map(deburr).filter(Boolean); }
 
-/** Tab chính phải có cột ngày HOẶC mã phiếu — đủ để phân biệt với tab khác. */
+/* Tab chính BẮT BUỘC có cột ngày — không có ngày thì không dựng được phiếu nào,
+   và đây cũng là thứ phân biệt nó với tab PX_Dự án (chỉ có mã phiếu + dự án).
+   Nếu chỉ đòi "có cột chứa chữ phiếu" thì gid xếp nhầm sẽ khiến PX_Dự án bị
+   nhận là tab chính. Dùng luôn bộ từ khóa ngày ở FIELD_DEFS cho nhất quán. */
+const DATE_KW = (FIELD_DEFS.find(f => f.k === 'd') || {kw:[]}).kw;
 function looksLikeMainTab(headers){
-  const h = tabFingerprint(headers);
-  const hasDate = h.some(x => /^ngay/.test(x) || x.includes('ngay tao'));
-  const hasId   = h.some(x => x.includes('phieu'));
-  return hasDate || hasId;
+  return tabFingerprint(headers).some(x => DATE_KW.some(kw => x.includes(kw)));
 }
 /** Tab nối phải có cột mã phiếu VÀ một cột công trình/dự án. */
 function looksLikeProjectTab(headers, cfg){
