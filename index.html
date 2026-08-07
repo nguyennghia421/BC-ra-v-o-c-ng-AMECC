@@ -198,6 +198,62 @@
   .status-chip.pending{background:var(--amber-dim);color:#B5730F;}
   .status-chip.rejected{background:var(--red-dim);color:var(--red);}
 
+  /* ---------- Trạng thái đồng bộ Google Sheet ---------- */
+  .sync-wrap{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .sync-time{font-size:11px;color:rgba(255,255,255,.72);}
+  .sync-time.is-load{color:#FFD98A;}
+  .sync-time.is-error{color:#FFB4AE;}
+  .btn-refresh{
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#FFFFFF;
+    font-size:11.5px;font-family:"Inter",sans-serif;padding:5px 12px;border-radius:7px;cursor:pointer;
+  }
+  .btn-refresh:hover:not(:disabled){background:rgba(255,255,255,.22);}
+  .btn-refresh:disabled{opacity:.5;cursor:default;}
+  .err-box{
+    background:var(--red-dim);border:1px solid var(--red);border-radius:var(--radius);
+    padding:12px 18px;color:#8E241A;font-size:12.5px;
+  }
+  .err-box h3{margin:0 0 6px;font-size:13.5px;color:var(--red);}
+  .err-box ol{margin:8px 0 0 18px;padding:0;line-height:1.6;}
+  .err-box code{background:#FFFFFF;padding:1px 5px;border-radius:4px;font-size:11.5px;}
+
+  /* ---------- Thanh bộ lọc chéo (cross-filter kiểu Power BI) ---------- */
+  .xf-bar{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:8px 14px;flex:0 0 auto;box-shadow:0 1px 2px rgba(20,30,50,.04);
+  }
+  .xf-bar.empty{display:none;}
+  .xf-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);font-weight:700;}
+  .xf-chip{
+    display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+    background:var(--blue-dim);color:#1B4FBF;border:1px solid #C3D6FA;
+    padding:3px 6px 3px 10px;border-radius:20px;
+  }
+  .xf-chip .xf-k{font-weight:700;opacity:.7;}
+  .xf-chip button{
+    background:#1B4FBF;color:#FFFFFF;border:none;border-radius:50%;width:15px;height:15px;
+    line-height:1;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;
+  }
+  .xf-clear{
+    background:transparent;border:1px solid var(--line);color:var(--text-dim);
+    font-size:11px;font-family:"Inter",sans-serif;padding:3px 10px;border-radius:20px;cursor:pointer;
+  }
+  .xf-clear:hover{border-color:var(--red);color:var(--red);}
+  .xf-hint{font-size:10.5px;color:var(--text-faint);font-style:italic;margin-left:auto;}
+
+  table.minitable tbody tr{cursor:pointer;}
+  table.minitable tbody tr:hover{background:var(--panel-2);}
+  table.minitable tbody tr.xf-on{background:var(--blue-dim);}
+  table.minitable tbody tr.xf-on td{font-weight:700;color:#1B4FBF;}
+  table.minitable tbody tr.xf-off{opacity:.42;}
+  canvas{cursor:pointer;}
+
+  .empty-note{
+    display:flex;align-items:center;justify-content:center;height:100%;
+    font-size:11.5px;color:var(--text-faint);font-style:italic;
+  }
+
   @media (max-width:1200px){
     .kpi-grid{grid-template-columns:repeat(3,1fr);}
     .row-3col{grid-template-columns:1fr;}
@@ -218,6 +274,10 @@
           <h1>Báo cáo phiếu mang hàng hóa ra công ty</h1>
         </div>
       </div>
+      <div class="sync-wrap">
+        <span class="sync-time" id="syncTime">Đang kết nối Google Sheet…</span>
+        <button class="btn-refresh" id="btnRefresh">⟳ Làm mới</button>
+      </div>
     </div>
 
     <div class="filter-row">
@@ -236,6 +296,11 @@
       </select>
     </div>
   </div>
+
+  <div class="err-box" id="errBox" style="display:none;"></div>
+
+  <!-- CROSS-FILTER BAR (Power BI style) -->
+  <div class="xf-bar empty" id="xfBar"></div>
 
   <!-- KPI ROW -->
   <div class="kpi-grid">
@@ -325,7 +390,10 @@
       </div>
     </div>
     <div class="panel">
-      <div class="panel-head"><h2>Top công trình / dự án</h2></div>
+      <div class="panel-head">
+        <h2>Top công trình / dự án</h2>
+        <span class="tag" title="Nguồn: tab PX_Dự án — 1 phiếu thuộc nhiều dự án được đếm ở từng dự án, nên tổng ở đây có thể lớn hơn số phiếu">PX_Dự án</span>
+      </div>
       <div class="minitable-scroll">
         <table class="minitable">
           <thead><tr><th>STT</th><th>Công trình / Dự án</th><th class="num sortable" id="sortProjectHead">Số phiếu ▾</th></tr></thead>
@@ -339,7 +407,10 @@
   <!-- DETAIL TABLE -->
   <div class="panel detail-panel">
     <div class="panel-head">
-      <h2>Chi tiết phiếu mang hàng hóa ra</h2>
+      <div class="headline">
+        <h2>Chi tiết phiếu mang hàng hóa ra</h2>
+        <span class="tag" id="detailCount">–</span>
+      </div>
       <div class="search-box">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8FA0BE" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         <input type="text" id="searchBox" placeholder="Tìm theo đơn vị, công trình, lý do...">
@@ -365,58 +436,120 @@
 </div>
 
 <script>
-const RECORDS = [{"d":"2026-07-01","u":"PLB","l":"Thép cuộn PL18x2000-A36","c":"A320","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang thép cuộn đi xả"},{"d":"2026-07-01","u":"EVB","l":"Dầu diezel , càng phụ xe nâng","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng 1.4 tấn","ly":"Mang 400 lít dầu diezel và càng phụ xe nâng cấp cho xe cẩu t"},{"d":"2026-07-01","u":"FAC2","l":"Máy móc thiết bị","c":"M304","s":"Hoàn thành","pt":"Xe tải nhỏ","ly":"Mang thiết bị sang sửa chữa sản phẩm"},{"d":"2026-07-01","u":"PLB","l":"Thép cuộn PL18x2000-A36","c":"A320","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang thép cuộn đi xả"},{"d":"2026-07-01","u":"MCC","l":"Mã thép tấm","c":"A286 & M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-01","u":"EVB","l":"Dầu diezel","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe tải thùng 2.4 tấn","ly":"Mang 200 lít dầu diezel sang bên Hoa Mai để cấp cho xe cẩu 4"},{"d":"2026-07-02","u":"EVB","l":"cáp + cọc thép","c":"phục vụ chung","s":"Hoàn thành","pt":"xe tải thùng kín 1.4T","ly":"Mang 2 cuộn cáp + cọc thép xuống GMC phục vụ công tác gia cố"},{"d":"2026-07-02","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển hàng hóa sang AMGT mạ"},{"d":"2026-07-02","u":"MCC","l":"Mã thép tấm","c":"A286 & M304","s":"Hoàn thành","pt":"Xe tải thùng kín","ly":"Thông quan"},{"d":"2026-07-02","u":"FAC2","l":"Máy móc thiết bị","c":"M304","s":"Hoàn thành","pt":"........","ly":"Mang thiết bị sang sửa chữa sản phẩm"},{"d":"2026-07-02","u":"PLB","l":"Thép cuộn PL18x2000-A36","c":"A320","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang thép cuộn đi xả"},{"d":"2026-07-02","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Đang xử lý","pt":"Xe tải 1 tấn","ly":"Chuyển công đoạn"},{"d":"2026-07-02","u":"FAC3","l":"Platform","c":"M304","s":"Hoàn thành","pt":"Xe Công","ly":"Chuyển sản phẩm đi làm sạch"},{"d":"2026-07-02","u":"FAC3","l":"Sản phẩm kết cấu","c":"M304","s":"Hoàn thành","pt":"Xe công","ly":"Chuyển sản phẩm phục vụ đóng kiện"},{"d":"2026-07-02","u":"EVB","l":"Vật tư thiết bị máy móc","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe ô tô tải KIA FRONTIER K200SD4WD","ly":"Đem biến mô lắp cho Xe nâng hàng 10 tấn KOMATSU- FD100 (AMS-"},{"d":"2026-07-02","u":"MCC","l":"Mã thép tấm","c":"A286 & M304","s":"Hoàn thành","pt":"Xe tải thùng kín","ly":"Thông quan"},{"d":"2026-07-03","u":"AMECC1","l":"Vật tư phụ kiện","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư đến cảng Đình Vũ phục vụ thi công"},{"d":"2026-07-03","u":"IRB","l":"Bông bảo ôn","c":"M306","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy Vật tư gia công dự án M306"},{"d":"2026-07-04","u":"CMB","l":"Thiết bị văn phòng","c":"V333","s":"Đang xử lý","pt":"Xe tải","ly":"Phục vụ công tác thi công, lắp đặt hệ thống làm mát tại văn "},{"d":"2026-07-04","u":"AMECC2","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mạ"},{"d":"2026-07-04","u":"FAC2","l":"Bảng tên và mã chặn kiện","c":"M304-Casing-U2","s":"Hoàn thành","pt":"xe tải","ly":"Lắp phụ kiện sau sơn"},{"d":"2026-07-04","u":"WTC","l":"Đầu cấp dây hàn PANA","c":"PVC","s":"Hoàn thành","pt":"Xe bán tải","ly":"Đầu cấp dây máy hàn PANA bị lỗi chuyển về đơn vị cung cấp bả"},{"d":"2026-07-05","u":"FAC2","l":"Vật tư phụ","c":"M304","s":"Đang xử lý","pt":"Xe máy","ly":"Chuyển đi sửa hàng"},{"d":"2026-07-06","u":"IRB","l":"Bông bảo ôn","c":"M306","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy Vật tư gia công dự án M306"},{"d":"2026-07-06","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"........","ly":"Chuyển hàng hóa sang AMGT mạ"},{"d":"2026-07-06","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"A286","s":"Hoàn thành","pt":"Xe tải 2 tấn","ly":"Chuyển công đoạn"},{"d":"2026-07-07","u":"FAC2","l":"Máy móc thiết bị","c":"M304-MainStack","s":"Hoàn thành","pt":"Xe máy","ly":"Lắp phụ kiện sau sơn"},{"d":"2026-07-07","u":"FAC2","l":"Sản phẩm","c":"M304","s":"Hoàn thành","pt":"........","ly":"Chuyển hàng hóa sang Trường An"},{"d":"2026-07-07","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"A286","s":"Hoàn thành","pt":"Xe tải 2 tấn","ly":"Chuyển công đoạn"},{"d":"2026-07-07","u":"PMC","l":"Lưới Đột","c":"M306","s":"Hoàn thành","pt":"Xe tự hành","ly":"Chuyển lưới đi mạ kẽm"},{"d":"2026-07-08","u":"AMECC1","l":"Vật tư phụ kiện + vật tư hàn","c":"A286, M271","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư đến cảng Đình Vũ phục vụ thi công"},{"d":"2026-07-08","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"xe tải thùng kín 2.4 tấn","ly":"Mang 200 lít dầu diezel sang bên Hoa Mai để cấp cho xe cẩu 2"},{"d":"2026-07-08","u":"IRB","l":"Linner","c":"M304","s":"Đang xử lý","pt":"Xe Máy","ly":"Lấy Vật tư gia công dự án M304"},{"d":"2026-07-08","u":"FAC3","l":"Vật tư phục vụ sản xuất","c":"M304","s":"Hoàn thành","pt":"Xe máy","ly":"Chuyển Vật tư phục vụ sản xuất"},{"d":"2026-07-08","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-08","u":"MCC","l":"Mã thép tấm và thép hình","c":"A303, B272, M296, M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-08","u":"FAC3","l":"Vật tư phục vụ sản xuất","c":"A303","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển Vật tư phục vụ sản xuất"},{"d":"2026-07-08","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-09","u":"WTC","l":"Dầm tổ hợp","c":"A303","s":"Hoàn thành","pt":"Xe sơ mi","ly":"Mang dầm tổ hợp đến GMC"},{"d":"2026-07-09","u":"FAC2","l":"Máy móc thiết bị","c":"M304-Casing-U2","s":"Hoàn thành","pt":"Xe máy","ly":"Lắp phụ kiện sau sơn"},{"d":"2026-07-09","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-09","u":"EVB","l":"Dầu diezel","c":"phục vụ chung","s":"Hoàn thành","pt":"xe tải thùng kín 1.4T","ly":"Mang 200 lít dầu diezel sang bên Hoa Mai cấp cho xe cẩu 45 t"},{"d":"2026-07-09","u":"FAC2","l":"Máy móc thiết bị","c":"M304-MainStack","s":"Đang xử lý","pt":"Xe máy","ly":"Lắp phụ kiện sau sơn"},{"d":"2026-07-10","u":"FAC2","l":"Sản phẩm","c":"E307","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-10","u":"FAC3","l":"Dầm trơn","c":"A290","s":"Hoàn thành","pt":"Xe Container","ly":"Chuyển sản phẩm đi mạ"},{"d":"2026-07-10","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe cơ giới","ly":"CHUYỂN MẠ"},{"d":"2026-07-10","u":"FAC3","l":"Sàn M313","c":"M313","s":"Hoàn thành","pt":"Xe quá khổ","ly":"Chuyển sản phẩm đi tổ hợp"},{"d":"2026-07-10","u":"FAC3","l":"Sàn M313","c":"M313","s":"Hoàn thành","pt":"Xe quá khổ","ly":"Chuyển sản phẩm đi tổ hợp"},{"d":"2026-07-11","u":"EVB","l":"Dầu diezel","c":"phục vụ chung","s":"Hoàn thành","pt":"xe tải thùng kín 2.4T","ly":"Mang 200 lít dầu diezel sang Hưng Thịnh Phát xuất cho xe cẩu"},{"d":"2026-07-11","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-11","u":"FAC2","l":"Sản phẩm","c":"M-304","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-11","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-11","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-11","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-11","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe sơ mi đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-11","u":"FAC3","l":"Vật tư phụ","c":"A303","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư ra cảng để phục vụ sản xuất"},{"d":"2026-07-11","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-12","u":"FAC2","l":"Sản phẩm","c":"E307","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-12","u":"FAC2","l":"Sản phẩm","c":"E307","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-12","u":"FAC3","l":"Sàn Flattfom dự án M313","c":"M313","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đi tổ hợp"},{"d":"2026-07-13","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-13","u":"FAC1","l":"Hàng kết cấu A290","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Mạ kẽm"},{"d":"2026-07-13","u":"IRB","l":"Linner","c":"M304","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy Vật tư gia công dự án M304"},{"d":"2026-07-13","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-13","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-13","u":"PAC","l":"Kết cấu thép","c":"U315","s":"Hoàn thành","pt":".","ly":"mang hàng đi mạ"},{"d":"2026-07-13","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-13","u":"EVB","l":"0","c":"0","s":"Đang xử lý","pt":"xe tải 1.4 tấn , xe đầu kéo","ly":"0"},{"d":"2026-07-13","u":"PMC","l":"D16 - A36","c":"M291","s":"Hoàn thành","pt":"Xe chở công nhân 9 chỗ","ly":"Bàn giao chuyển công đoạn"},{"d":"2026-07-13","u":"PMC","l":"Dây hàn","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-13","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-13","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-13","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-13","u":"MCC","l":"Thép Hình","c":"M270","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-13","u":"FAC3","l":"Mã giao rời","c":"M313","s":"Hoàn thành","pt":"chưa có thông tin","ly":"Chuyển sản phẩm đi tổ hợp"},{"d":"2026-07-13","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-13","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"Cung cấp 200 lít dầu đi GMC"},{"d":"2026-07-13","u":"EVB","l":"Lốp","c":"PVC","s":"Đang xử lý","pt":"Xe tải đầu kéo HOWO 26 tấn","ly":"Vận chuyển lốp xe sang GMC"},{"d":"2026-07-14","u":"FAC1","l":"Fitting","c":"M296","s":"Hoàn thành","pt":"...............................","ly":"Phục vụ gia công chế tạo"},{"d":"2026-07-14","u":"EVB","l":"Lốp","c":"PVC","s":"Hoàn thành","pt":"Xe tải đầu kéo HOWO 26 tấn","ly":"Vận chuyển lốp xe sang GMC"},{"d":"2026-07-14","u":"FAC1","l":"Hàng kết cấu","c":"M305 - Unit 2","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-14","u":"FAC1","l":"Hàng kết cấu A290","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hàng hóa sang Mạ kẽm"},{"d":"2026-07-14","u":"FAC1","l":".","c":".","s":"Đang xử lý","pt":".","ly":"."},{"d":"2026-07-14","u":"PMC","l":"D16 - A36","c":"M291","s":"Hoàn thành","pt":"Xe chở công nhân 9 chỗ","ly":"Bàn giao chuyển công đoạn"},{"d":"2026-07-14","u":"IRB","l":"6 bộ copha, 1 dây nguồn, 1 cưa gỗ, 1 búa, 1 túi nêm gỗ","c":"E307","s":"Hoàn thành","pt":"xe rùa","ly":"Mang vật tư, dụng cụ sang Amecc Hoa mai thi công dự án E307"},{"d":"2026-07-14","u":"FAC1","l":"thiết bị phục vụ sản xuất","c":"M306","s":"Đang xử lý","pt":"Xe máy","ly":"Chuyển thiết bị sang TA phục vụ sản xuất"},{"d":"2026-07-14","u":"AMECC1","l":"BHLĐ + vật tư hàn+ MMTB","c":"A286, M270, m296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư đến cảng Đình Vũ phục vụ thi công"},{"d":"2026-07-14","u":"FAC1","l":"Vật tư gia công A303","c":"A303","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển vật tư"},{"d":"2026-07-14","u":"FAC1","l":"Hàng kết cấu A290","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Mạ kẽm"},{"d":"2026-07-14","u":"IRB","l":"máy trộn bê tông, bạt dứa","c":"B272 - H890","s":"Hoàn thành","pt":"xe tải","ly":"Mang vật tư, dụng cụ xuống GMC thi công dự án B272 - H890"},{"d":"2026-07-15","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-15","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-15","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-15","u":"PAC","l":"KCT","c":"A290","s":"Hoàn thành","pt":".","ly":"Chuyển hàng ra cảng"},{"d":"2026-07-15","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-15","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-15","u":"FAC3","l":"Vật tư phụ","c":"M304","s":"Hoàn thành","pt":"Xe máy","ly":"Chuyển vật tư ra cảng để phục vụ sản xuất"},{"d":"2026-07-15","u":"FAC1","l":"Sản phẩm","c":"U276","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-15","u":"IRB","l":"Covertion","c":"B272","s":"Hoàn thành","pt":"Xe Đầu kéo","ly":"Lấy vật tư dự án B272"},{"d":"2026-07-15","u":"PAC","l":"Kết cấu","c":"M296","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-15","u":"FAC2","l":"Sản phẩm","c":"U293","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-15","u":"IRB","l":"máy trộn bê tông, bê tông, thùng đựng nước, dây dẫn nước, dây nguồn, máy cưa, búa","c":"E307","s":"Hoàn thành","pt":"xe đầu kéo","ly":"Mang vật tư, dụng cụ sang Amecc Hoa mai thi công dự án E307"},{"d":"2026-07-15","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"M296","s":"Hoàn thành","pt":"Xe tải 2 tấn","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-15","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-16","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-16","u":"PMC","l":"Stack","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-16","u":"FAC1","l":"Kết cấu A290","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-16","u":"PAC","l":"Kết cấu thép","c":"U315","s":"Hoàn thành","pt":".","ly":"Chuyển hàng"},{"d":"2026-07-16","u":"FAC1","l":"panel","c":"M307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đổ bê tông"},{"d":"2026-07-16","u":"AMECC1","l":"Phụ kiện","c":"m296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư đến cảng Đình Vũ phục vụ thi công"},{"d":"2026-07-16","u":"MDC","l":"Mẫu phôi test thợ hàn cho module","c":"A286","s":"Hoàn thành","pt":"Xe ô tô 7 chỗ","ly":"Cần phôi cho test thợ"},{"d":"2026-07-16","u":"FAC1","l":"Sản phẩm","c":"U284","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển vật tư"},{"d":"2026-07-16","u":"PAC","l":"Kết cấu thép","c":"U315","s":"Hoàn thành","pt":".","ly":"Chuyển hàng"},{"d":"2026-07-16","u":"FAC3","l":"sản phẩm","c":"M313","s":"Hoàn thành","pt":"chưa có thông tin","ly":"Chuyển sản phẩm đi mạ"},{"d":"2026-07-16","u":"FAC1","l":"Kết cấu A290","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-16","u":"PAC","l":"Kết cấu thép","c":"U315","s":"Hoàn thành","pt":".","ly":"Chuyển hàng"},{"d":"2026-07-17","u":"PMC","l":"Stack","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"bulon đóng kiện","c":"M304","s":"Hoàn thành","pt":"xe máy","ly":"chuyển vật tư về phục vụ đóng kiện"},{"d":"2026-07-17","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-17","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"PAC","l":"KCT","c":"A286","s":"Hoàn thành","pt":".","ly":"Chuyển hàng ra cảng"},{"d":"2026-07-17","u":"IRB","l":"Tôn Biện pháp sấy","c":"B272-H890","s":"Hoàn thành","pt":"Xe Đầu kéo","ly":"Lấy vật tư dự án B272"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"EVB","l":"Dầu diezel","c":"phục vụ chung","s":"Đang xử lý","pt":"xe tải thùng kín 1.4T","ly":"Mang 2 phi mỗi phi 200 lít dầu diezel sang bên Hoa Mai cấp c"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-17","u":"IRB","l":"Vật tư phụ","c":"E307","s":"Hoàn thành","pt":"Xe Máy","ly":"Lấy vật tư cầm tay phục vụ dự án E307"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M296","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"Cung cấp 2 phi mỗi phi 200 lít dầu đi Hoa Mai"},{"d":"2026-07-17","u":"IRB","l":"Linner","c":"M304","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy Vật tư gia công dự án M304"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-17","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"Cung cấp 2 phi mỗi phi 200 lít dầu đi Hoa Mai"},{"d":"2026-07-17","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-18","u":"FAC1","l":"Thiết bị","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-18","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe cơ giới","ly":"Chuyển sơn"},{"d":"2026-07-18","u":"TRƯỜNG AN","l":"bulon và vật tư phụ đóng kiện","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"chuyển vật tư về phục vụ đóng kiện"},{"d":"2026-07-18","u":"FAC1","l":"Kết cấu","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-18","u":"FAC1","l":"Khí nén","c":"U302","s":"Hoàn thành","pt":"Xe tải nhỏ","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-18","u":"FAC1","l":"Sản phẩm E307","c":"M307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đổ bê tông"},{"d":"2026-07-18","u":"IRB","l":"cáp 10 tấn, mã ní, dây điện, máy mài","c":"E307","s":"Hoàn thành","pt":"xe rùa","ly":"Mang vật tư, dụng cụ sang Amecc Hoa mai thi công dự án E307"},{"d":"2026-07-18","u":"PAC","l":"KCT","c":"A286","s":"Hoàn thành","pt":".","ly":"Chuyển hàng ra cảng"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-18","u":"TRƯỜNG AN","l":"bulon và vật tư phụ đóng kiện","c":"M291","s":"Hoàn thành","pt":"xe","ly":"chuyển vật tư về phục vụ đóng kiện"},{"d":"2026-07-18","u":"FAC1","l":"Kế cấu thép","c":"A290","s":"Hoàn thành","pt":"Chưa xác định","ly":"Chuyển hàng sang mạ"},{"d":"2026-07-18","u":"FAC1","l":"Phụ kiện /bu lông","c":"U302","s":"Hoàn thành","pt":"Xe máy","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu","c":"A290","s":"Từ chối/Hủy","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-18","u":"FAC1","l":"Thiết bị vật tư phụ","c":"M305 - Unit 1","s":"Hoàn thành","pt":"Xe máy","ly":"Mang hoàng hóa sang hoàn thiện"},{"d":"2026-07-18","u":"TRƯỜNG AN","l":"bán thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"chuyển về Trường An phục vụ sản xuất"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-18","u":"MCC","l":"Mã thép tấm","c":"M270","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu","c":"A290","s":"Hoàn thành","pt":".","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-18","u":"FAC1","l":"Sản phẩm E307","c":"M307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đổ bê tông"},{"d":"2026-07-18","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-19","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-19","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-19","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-19","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển hàng ra cảng"},{"d":"2026-07-19","u":"FAC1","l":"Khí nén","c":"M306","s":"Hoàn thành","pt":"Xe tải nhỏ","ly":"Mang hoàng hóa sang hoàn thiện"},{"d":"2026-07-19","u":"FAC3","l":"Shipping Mark","c":"M304","s":"Hoàn thành","pt":"Xe máy","ly":"Chuyển vật tư phục vụ đóng kiện"},{"d":"2026-07-19","u":"EVB","l":"Vật tư thiết bị máy móc","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe ô tô tải KIA FRONTIER K200SD4WD","ly":"Đem vật tư thiết bị lắp động cơ cho nhà làm sạch và kéo đườn"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":".","ly":"mang hàng đi mạ"},{"d":"2026-07-20","u":"FAC3","l":"Vật tư phụ","c":"A303","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư ra cảng để phục vụ sản xuất"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-20","u":"IRB","l":"Bê tông","c":"E307","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy vật tư gia công dự án E307"},{"d":"2026-07-20","u":"FAC2","l":"Máy móc thiết bị","c":"U302","s":"Hoàn thành","pt":"Xe máy","ly":"Sửa sắt hàn"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-20","u":"FAC1","l":"Hàng chuyển mạ","c":"M305","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-20","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-20","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"........","ly":"Chuyển hàng hóa sang AMGT mạ"},{"d":"2026-07-20","u":"TRƯỜNG AN","l":"vật tư phục vụ sản xuất","c":"M304, U302","s":"Hoàn thành","pt":"xe tải","ly":"phục vụ sản xuất"},{"d":"2026-07-20","u":"FAC3","l":"Máy hàn","c":"A303","s":"Hoàn thành","pt":"Xe đầu kéo hoặc xe tải thùng","ly":"Chuyển máy hàn thừa về để phục vụ gia công tại nhà máy"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":".","ly":"mang hàng đi mạ"},{"d":"2026-07-20","u":"IRB","l":"Vật tư phụ","c":"U302","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-20","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"........","ly":"Chuyển hàng hóa sang AMGT mạ"},{"d":"2026-07-20","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-20","u":"FAC1","l":"Thiết bị vật tư phụ","c":"U302","s":"Hoàn thành","pt":".","ly":"Mang hoàng hóa sang hoàn thiện"},{"d":"2026-07-20","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-21","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-21","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Đang xử lý","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-21","u":"PAC","l":"Vật tư","c":"A290","s":"Hoàn thành","pt":"Xe tải","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-21","u":"PMC","l":"Dây hàn","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"FAC1","l":"Vật tư hàn","c":"A303","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển vật tư"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-21","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe cơ giới","ly":"CHUYỂN MẠ"},{"d":"2026-07-21","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":".","ly":"mang hàng đi mạ"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"PMC","l":"Main Stack","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"EVB","l":"cáp","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"mang 3 cuộn cáp xuống GMC"},{"d":"2026-07-21","u":"TRƯỜNG AN","l":"thành phẩm","c":"M277","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M291","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-21","u":"FAC1","l":"Thiết bị vật tư phụ","c":"U302","s":"Hoàn thành","pt":".","ly":"Mang hoàng hóa sang hoàn thiện"},{"d":"2026-07-21","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-22","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải 2 tấn","ly":"Chuyển công đoạn"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-22","u":"FAC3","l":"Vật tư biện pháp, vật tư phụ","c":"A303","s":"Hoàn thành","pt":"Ghép xe đầu kéo","ly":"Chuyển vật tư làm sàn biện pháp và Vật tư phụ ra GMC phục vụ"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"MCC","l":"Thép Hình","c":"U284","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-22","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-22","u":"IRB","l":"Vật tư phụ","c":"E307","s":"Hoàn thành","pt":"Xe Máy","ly":"Lấy vật tư gia công dự án E307"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-22","u":"FAC2","l":"Máy móc thiết bị","c":"U302","s":"Hoàn thành","pt":"Xe máy","ly":"Sửa sắt hàn"},{"d":"2026-07-22","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M296","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"FAC2","l":"Sản phẩm","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển hàng sang Trường An"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"FAC2","l":"Máy móc thiết bị","c":"M304-Casing-U2","s":"Hoàn thành","pt":"Xe máy","ly":"Sửa sắt hàn"},{"d":"2026-07-22","u":"FAC3","l":"Giá kiện","c":"E307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đi đóng kiện"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M296","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"MCC","l":"Mã thép tấm","c":"A303 & U324","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-22","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-22","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-22","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":".","ly":"mang hàng đi mạ"},{"d":"2026-07-23","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":".","ly":"mang hàng đi mạ"},{"d":"2026-07-23","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-23","u":"PMC","l":"Main Stack","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-23","u":"IRB","l":"Bạt","c":"U302; E307","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy vật tư phục vụ dự án U302; E307"},{"d":"2026-07-23","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-23","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe sơ mi đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-23","u":"MDC","l":"Sơn","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển sơn từ Amecc về GMC để thi công dự án SAF - A286"},{"d":"2026-07-23","u":"FAC1","l":"vật tư bảo hộ","c":"U302","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển vật tư"},{"d":"2026-07-23","u":"PAC","l":"Vật tư","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-23","u":"FAC1","l":"Phụ kiện B272","c":"B272","s":"Hoàn thành","pt":"xe tải","ly":"Chuyển sơn và lắp phụ kiện"},{"d":"2026-07-23","u":"FAC1","l":"Thiết bị vật tư phụ","c":"U302","s":"Hoàn thành","pt":".","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-23","u":"FAC1","l":"Kết cấu","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-23","u":"MCC","l":"ỐNG","c":"E307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-23","u":"TRƯỜNG AN","l":"Vật Tư sơn","c":"M306","s":"Hoàn thành","pt":"xe tải","ly":"chuyển vật tư về Trường An phục vụ sản xuất"},{"d":"2026-07-23","u":"FAC1","l":"Phụ kiện E307","c":"E307","s":"Hoàn thành","pt":"xe tải","ly":"Lắp phụ kiện"},{"d":"2026-07-24","u":"MCC","l":"Mã thép tấm","c":"A286","s":"Hoàn thành","pt":"Xe tải thùng kín","ly":"Thông quan"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M296","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M296","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"FAC1","l":"Vật tư hàn","c":"A303","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển vật tư"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"IRB","l":"Bông bảo ôn","c":"U302","s":"Hoàn thành","pt":"Xe tải 1.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-24","u":"IRB","l":"Vật tư phụ","c":"E307","s":"Hoàn thành","pt":"Xe Máy","ly":"Lấy vật tư gia công dự án E307"},{"d":"2026-07-24","u":"MDC","l":"Sơn","c":"M296","s":"Hoàn thành","pt":"oto","ly":"Vận chuyển sơn từ Amecc đến GMC cho nhà thầu ILYANG"},{"d":"2026-07-24","u":"FAC1","l":"Khí nén","c":"U302","s":"Hoàn thành","pt":".","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-24","u":"PMC","l":"The Long Welding Necks _ hàng KT cấp","c":"M271","s":"Hoàn thành","pt":"xe tải 1.4 tấn","ly":"Chuyển ra thuê gia công ngoài"},{"d":"2026-07-24","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"Cung cấp 1 phi mỗi phi 200 lít dầu đi Hoa Mai"},{"d":"2026-07-24","u":"IRB","l":"Linner","c":"U302; V314","s":"Hoàn thành","pt":"Xe tải 1.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-24","u":"MDC","l":"Que hàn TIG","c":"A286","s":"Hoàn thành","pt":"Xe 9 chỗ","ly":"Chuyển que hàn Tig từ Amecc về GMC để cấp cho nhà thầu Khởi "},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"AMECC1","l":"Phụ kiện, vật liệu hàn","c":"m296, M270, M271","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư đến cảng Đình Vũ phục vụ thi công"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"Chuyển hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"Chuyển hàng"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"bulon đóng kiện và vật tư sơn","c":"U302 & B272","s":"Hoàn thành","pt":"xe tải","ly":"chuyển vật tư về Trường An phục vụ sản xuất"},{"d":"2026-07-24","u":"AMECC GT","l":"Bán thành phẩm","c":"M313","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-24","u":"PAC","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-25","u":"FAC3","l":"Sàn M313","c":"M313","s":"Hoàn thành","pt":"chưa có thông tin","ly":"Chuyển sản phẩm đi tổ hợp"},{"d":"2026-07-25","u":"HRB","l":"Máy mài, máy hàn","c":"Đề xuất mang hàng hóa ra cổng","s":"Hoàn thành","pt":"ô tô","ly":"Trao tặng nhà trường"},{"d":"2026-07-25","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-25","u":"TRƯỜNG AN","l":"Vật Tư sơn","c":"M296","s":"Hoàn thành","pt":"xe","ly":"chuyển vật tư về Trường An phục vụ sản xuất"},{"d":"2026-07-25","u":"TRƯỜNG AN","l":"Vật Tư Hạt Mài","c":"M306,M291,U302,E307","s":"Hoàn thành","pt":"xe","ly":"chuyển vật tư về Trường An phục vụ sản xuất"},{"d":"2026-07-25","u":"AMECC GT","l":"Bán thành phẩm","c":"M313, U284","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-25","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"Cung cấp 2 phi mỗi phi 200 lít dầu đi Hưng Thịnh Phát"},{"d":"2026-07-25","u":"IRB","l":"Gỗ phủ phim","c":"B272 - H890","s":"Hoàn thành","pt":"xe tải","ly":"Mang vật tư xuống GMC thi công dự án B272-H890"},{"d":"2026-07-25","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-25","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-25","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-25","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-25","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-25","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-25","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"A286","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-25","u":"MDC","l":"Que hàn TIG","c":"A286","s":"Hoàn thành","pt":"Xe 29 chỗ","ly":"Chuyển que hàn Tig từ Amecc về GMC để cấp cho nhà thầu Khởi "},{"d":"2026-07-25","u":"EVB","l":"Dầu diezel","c":"PVC","s":"Hoàn thành","pt":"Xe tải thùng kín Thaco 1.4T","ly":"Cung cấp 2 phi mỗi phi 200 lít dầu đi Hoa Mai"},{"d":"2026-07-25","u":"IRB","l":"Vật tư phụ","c":"U302","s":"Hoàn thành","pt":"Xe tải 1.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-25","u":"FAC2","l":"Sản phẩm","c":"A290","s":"Hoàn thành","pt":"........","ly":"Chuyển hàng hóa sang AMGT mạ"},{"d":"2026-07-25","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-25","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-25","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-25","u":"IRB","l":"Linner","c":"U302","s":"Hoàn thành","pt":"Xe tải 1.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-26","u":"PAC","l":"Kết cấu thép","c":"A286","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-26","u":"FAC3","l":"Kết cấu","c":"M304","s":"Hoàn thành","pt":"Xe Container","ly":"Chuyển sản phẩm đi làm sạch"},{"d":"2026-07-26","u":"MDC","l":"Que hàn TIG","c":"A286","s":"Hoàn thành","pt":"Xe 9 chỗ","ly":"Chuyển que hàn Tig từ Amecc về GMC để cấp cho nhà thầu Khởi "},{"d":"2026-07-26","u":"AMECC GT","l":"Bán thành phẩm","c":"M313, U284, A290","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-26","u":"PMC","l":"SHELL LỐC PL8","c":"M304","s":"Hoàn thành","pt":"Xe sơ-mi","ly":"Bàn giao chuyển công đoạn"},{"d":"2026-07-26","u":"FAC3","l":"Khung kiện Shipping","c":"U302","s":"Hoàn thành","pt":"Xe quá khổ","ly":"Chuyển sản phẩm đi tổ hợp"},{"d":"2026-07-26","u":"MCC","l":"Mã thép tấm","c":"M296","s":"Hoàn thành","pt":"Xe tải thùng kín","ly":"Thông quan"},{"d":"2026-07-26","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-26","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-26","u":"PMC","l":"Main Stack","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-27","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe cơ giới","ly":"CHUYỂN MẠ"},{"d":"2026-07-27","u":"AMECC GT","l":"Vật tư phụ (Bulong)","c":"U302","s":"Hoàn thành","pt":"Xe","ly":"Đóng kiện bulong"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"chuyển hàng"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"chuyển hàng"},{"d":"2026-07-27","u":"PAC","l":"KCT","c":"M271","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển hàng"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Từ chối/Hủy","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-27","u":"PMB","l":"OUTLET 3INCH","c":"M270","s":"Đang xử lý","pt":"Xe tự hành","ly":"Phục vụ lắp đặt"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"chuyển hàng"},{"d":"2026-07-27","u":"FAC3","l":"Vật tư phụ","c":"M313","s":"Hoàn thành","pt":"Xe máy","ly":"Chuyển vật tư để phục vụ sản xuất"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"chuyển hàng"},{"d":"2026-07-27","u":"PMC","l":"OUTLET 3INCH","c":"M270","s":"Hoàn thành","pt":"Xe tự hành","ly":"Phục vụ lắp đặt"},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"chuyển hàng"},{"d":"2026-07-27","u":"FAC3","l":"Mã giao rời","c":"A290","s":"Hoàn thành","pt":"Xe Container","ly":"Chuyển sản phẩm đi mạ"},{"d":"2026-07-27","u":"EVB","l":"Vật tư dụng cụ","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe ô tô tải KIA FRONTIER K200SD4WD","ly":"Đem dầu thủy lực bổ sung cho cẩu bánh lốp zoomlion 25 Tấn (1"},{"d":"2026-07-27","u":"EVB","l":"Vật tư thiết bị máy móc","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe máy","ly":"Đem Block điều hòa của máy laser cắt dầm H tự động 20kw (AMS"},{"d":"2026-07-27","u":"EVB","l":"Vật tư thiết bị máy móc","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe ô tô tải KIA FRONTIER K200SD4WD","ly":"Đem vật tư điện lắp đặt phục vụ sản xuất (Hoa Mai)"},{"d":"2026-07-27","u":"FAC1","l":"Vật tư phụ kiện","c":"E307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang phụ kiện sang thi công dự án"},{"d":"2026-07-27","u":"FAC1","l":"Máy móc thiết bị","c":"M296","s":"Hoàn thành","pt":"Xe đạp điện","ly":"Mang máy móc thiết bị sang thi công dự án"},{"d":"2026-07-27","u":"IRB","l":"Covertion","c":"B272","s":"Hoàn thành","pt":"Xe Hoàng Ngọc Phát","ly":"Lấy vật tư dự án B272"},{"d":"2026-07-27","u":"IRB","l":"Linner","c":"V314","s":"Hoàn thành","pt":"Xe Đầu kéo","ly":"Lấy vật tư phục vụ dự án V314"},{"d":"2026-07-27","u":"AMECC GT","l":"Bán thành phẩm","c":"A290, M304","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-27","u":"FAC1","l":"Kết cấu","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển mạ"},{"d":"2026-07-27","u":"IRB","l":"Vật tư phụ","c":"M306","s":"Hoàn thành","pt":"Xe Máy","ly":"Lấy Vật tư gia công dự án M306"},{"d":"2026-07-27","u":"MDC","l":"Que hàn TIG","c":"A286","s":"Hoàn thành","pt":"Xe 9 chỗ","ly":"Chuyển que hàn Tig từ Amecc về GMC để cấp cho nhà thầu Khởi "},{"d":"2026-07-27","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":".","ly":"chuyển hàng"},{"d":"2026-07-27","u":"TRƯỜNG AN","l":"thành phẩm","c":"M296","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-27","u":"FAC1","l":"Hàng chuyển mạ","c":"U276","s":"Hoàn thành","pt":"Xe máy - Đi bộ","ly":"Chuyển mạ"},{"d":"2026-07-27","u":"AMECC GT","l":"Bán thành phẩm","c":"U302","s":"Đang xử lý","pt":"xe","ly":"phục vụ sản xuất"},{"d":"2026-07-27","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-27","u":"FAC1","l":"Vật tư hàn và phụ kiện","c":"A303","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển vật tư"},{"d":"2026-07-27","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-27","u":"TRƯỜNG AN","l":"bulon đóng kiện","c":"M304","s":"Hoàn thành","pt":"xe máy","ly":"chuyển vật tư về phục vụ đóng kiện"},{"d":"2026-07-27","u":"TRƯỜNG AN","l":"thành phẩm","c":"M291","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-27","u":"TRƯỜNG AN","l":"thành phẩm","c":"M291","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-28","u":"AMECC GT","l":"Bán thành phẩm","c":"A290, M304","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-28","u":"FAB","l":"DẦU DIEZIEL","c":"PVC","s":"Hoàn thành","pt":"Xe tải 2.4T","ly":"Chuyến dầu phục vụ sx"},{"d":"2026-07-28","u":"FAC1","l":"Hàng kết cấu","c":"M306","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-28","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-28","u":"FAC1","l":"Khí nén + Dầu Diesel","c":"M306","s":"Hoàn thành","pt":"Xe tải nhỏ","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-28","u":"TRƯỜNG AN","l":"dầu diezel và hạt mài","c":"pvc , M306, M291, U302, E307","s":"Hoàn thành","pt":"xe đầu kéo","ly":"chuyển vật tư về Trường An phục vụ sản xuất"},{"d":"2026-07-28","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-28","u":"AMECC GT","l":"Bán thành phẩm","c":"M313, U284, A290, E307","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-28","u":"MDC","l":"Pipe Fitting","c":"M296","s":"Hoàn thành","pt":"oto","ly":"Chuyển pipe fitting từ Amecc đi GMC"},{"d":"2026-07-28","u":"FAC2","l":"Máy móc thiết bị","c":"M291","s":"Hoàn thành","pt":"........","ly":"Mang thiết bị sang sửa chữa sản phẩm"},{"d":"2026-07-28","u":"PAC","l":"Mã tổ hợp","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Đề nghị mang hàng hoá ra cổng phục vụ dự án"},{"d":"2026-07-28","u":"AMECC TM","l":"Thép tấm","c":"ALPHA","s":"Đang xử lý","pt":"Ô tô","ly":"Xuất hàng Thương mại"},{"d":"2026-07-28","u":"AMECC GT","l":"Bulong","c":"U302","s":"Hoàn thành","pt":"Xe","ly":"Bulong về đóng kiện giao hàng"},{"d":"2026-07-28","u":"EVB","l":"Vật tư thiết bị máy móc","c":"Phục vụ chung","s":"Đang xử lý","pt":"Xe ô tô văn phòng","ly":"Đem 20 cân điện tử locell mang đi hiệu chuẩn định kỳ để phục"},{"d":"2026-07-28","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-28","u":"FAC1","l":"Radian","c":"E307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đổ bê tông"},{"d":"2026-07-28","u":"EVB","l":"Vật tư thiết bị máy móc","c":"Phục vụ chung","s":"Hoàn thành","pt":"Xe ô tô văn phòng","ly":"Đem 20 cân điện tử locell mang đi hiệu chuẩn định kỳ để phục"},{"d":"2026-07-28","u":"FAC1","l":"Fitting","c":"M296","s":"Hoàn thành","pt":"...............................","ly":"Phục vụ gia công chế tạo"},{"d":"2026-07-28","u":"FAC1","l":"Radian","c":"E307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đổ bê tông"},{"d":"2026-07-28","u":"FAC1","l":"Radian","c":"E307","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển đổ bê tông"},{"d":"2026-07-28","u":"IRB","l":"Bê tông","c":"E307","s":"Hoàn thành","pt":"Xe Đầu kéo","ly":"Lấy vật tư gia công dự án E307"},{"d":"2026-07-28","u":"IRB","l":"Vật tư phụ","c":"E307","s":"Hoàn thành","pt":"Xe Đầu kéo","ly":"Lấy vật tư gia công dự án E307"},{"d":"2026-07-28","u":"IRB","l":"Vật tư phụ","c":"E307","s":"Hoàn thành","pt":"Xe Máy","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-28","u":"IRB","l":"Bông bảo ôn","c":"U302","s":"Hoàn thành","pt":"Xe tải 1.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-28","u":"FAC3","l":"Vật tư phụ","c":"A303","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển vật tư ra cảng để phục vụ sản xuất"},{"d":"2026-07-29","u":"PMC","l":"Main Stack","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-29","u":"FAC1","l":"Phụ kiện","c":"B272","s":"Hoàn thành","pt":"Xe máy","ly":"Chuyển lắp cửa"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"M296","s":"Hoàn thành","pt":"Xe sơ mi đầu kéo","ly":"Chuyển công đoạn"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"MDC","l":"Bolt, nut, lắc tay","c":"A286","s":"Hoàn thành","pt":"Xe 9 chỗ","ly":"Chuyển vật tư, dụng cụ từ Amecc đến GMC phục vu thi công dự "},{"d":"2026-07-29","u":"AMECC GT","l":"Bán thành phẩm","c":"U292","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-29","u":"PMC","l":"Bán thành phẩm chuyển đi gia công","c":"A286","s":"Đang xử lý","pt":"Xe 4 chỗ","ly":"Chuyển bán thành phẩm đi thuê ngoài"},{"d":"2026-07-29","u":"AMECC2","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mạ"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"mang hàng đi mạ"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-29","u":"IRB","l":"Bông bảo ôn","c":"U302","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-29","u":"FAC3","l":"Khung kiện Shipping","c":"E307-U302","s":"Hoàn thành","pt":"Xe quá khổ","ly":"Chuyển sản phẩm đi tổ hợp"},{"d":"2026-07-30","u":"AMECC GT","l":"Bán thành phẩm","c":"M304","s":"Đang xử lý","pt":"xe","ly":"Phục vụ sản xuất"},{"d":"2026-07-30","u":"IRB","l":"Linner","c":"U302","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-30","u":"IRB","l":"Vật tư phụ","c":"E307","s":"Hoàn thành","pt":"Xe tải 2.4","ly":"Lấy vật tư gia công dự án E307"},{"d":"2026-07-30","u":"MDC","l":"Máy mài, đĩa mài","c":"M296","s":"Hoàn thành","pt":"Xe máy","ly":"Đưa vật tư từ Amecc sang Hoa Mai để thi công"},{"d":"2026-07-30","u":"AMECC GT","l":"Vật tư sơn","c":"M304","s":"Hoàn thành","pt":"Xe tự hành","ly":"Sơn DA M304"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"PAC","l":"Vật tư","c":"V257","s":"Hoàn thành","pt":"Xe tải","ly":"chuyển hàng"},{"d":"2026-07-30","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"TRƯỜNG AN","l":"vật tư bulon và bạt đóng kiện","c":"U302 & B272","s":"Hoàn thành","pt":"xe tải","ly":"chuyển vật tư về phục vụ đóng kiện"},{"d":"2026-07-30","u":"AMECC GT","l":"Bán thành phẩm","c":"M313, U284, M305","s":"Hoàn thành","pt":"cẩu tự hành","ly":"Chuyển bán thành phẩm về gia công"},{"d":"2026-07-30","u":"AMECC GT","l":"Bán thành phẩm","c":"M304","s":"Đang xử lý","pt":"xe","ly":"Phục vụ sản xuất"},{"d":"2026-07-30","u":"MCC","l":"ỐNG","c":"M296","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Thông quan"},{"d":"2026-07-30","u":"TRƯỜNG AN","l":"thành phẩm","c":"M270","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-30","u":"GREEN TECH","l":"Kết cấu","c":"B272","s":"Hoàn thành","pt":"chờ bố trí","ly":"Chuyển kết cấu nhúng mạ, tổ hợp"},{"d":"2026-07-30","u":"FAB","l":"DẦU DIEZIEL","c":"PVC","s":"Hoàn thành","pt":"Xe tải 2.4T","ly":"Chuyến dầu phục vụ sx"},{"d":"2026-07-30","u":"PMC","l":"The Long Welding Necks _ hàng KT cấp","c":"M271","s":"Hoàn thành","pt":"PM Mr Thi nhờ gửi cùng xe chở CB-CNV","ly":"Bàn giao BTP"},{"d":"2026-07-30","u":"PMC","l":"Sản phẩm shop out sau hàn","c":"A286 , M296","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển công đoạn"},{"d":"2026-07-30","u":"FAC2","l":"Sản phẩm","c":"M313","s":"Hoàn thành","pt":"Xe cơ giới","ly":"CHUYỂN MẠ"},{"d":"2026-07-30","u":"FAC3","l":"Dụng cụ cầm tay","c":"M313","s":"Hoàn thành","pt":"Xe máy","ly":"Vệ sinh visual nghiệm thu sau Trial"},{"d":"2026-07-30","u":"FAC1","l":"Phụ kiện+ Mã","c":"B272","s":"Hoàn thành","pt":"Xe máy","ly":"Chuyển lắp cửa, sửa Visual"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"PAC","l":"Kết cấu thép","c":"A290","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-30","u":"TRƯỜNG AN","l":"thành phẩm","c":"M304","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-30","u":"AMECC2","l":"Kết cấu thép","c":"M304","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Chuyển làm sạch và sơn"},{"d":"2026-07-30","u":"TRƯỜNG AN","l":"thành phẩm","c":"M270","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-30","u":"TRƯỜNG AN","l":"thành phẩm","c":"M270","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-30","u":"MDC","l":"Thiết bị, văn phòng phẩm","c":"UAE Taziz Methanol","s":"Đang xử lý","pt":"xe tải","ly":"Chuyển kệ, văn phòng phẩm phục vụ công tác chuyển văn phòng"},{"d":"2026-07-30","u":"FAC3","l":"Mã giao rời","c":"A290","s":"Hoàn thành","pt":"Xe tải","ly":"Chuyển sản phẩm đi làm sạch"},{"d":"2026-07-30","u":"FAC3","l":"sản phẩm","c":"A294","s":"Hoàn thành","pt":"Xe Container","ly":"Chuyển sản phẩm đi làm sạch"},{"d":"2026-07-30","u":"TRƯỜNG AN","l":"thành phẩm","c":"M270","s":"Hoàn thành","pt":"xe đầu kéo","ly":"xuất hàng"},{"d":"2026-07-30","u":"FAC1","l":"Khí nén","c":"M305 - Unit 2","s":"Hoàn thành","pt":"Xe tải nhỏ","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-30","u":"FAC1","l":"Thiết bị vật tư phụ","c":"M306","s":"Hoàn thành","pt":".","ly":"Sửa chữa sắt hàn"},{"d":"2026-07-31","u":"AMECC TM","l":"Thép tấm","c":"E.NHAT","s":"Đang xử lý","pt":"Ô tô","ly":"Xuất hàng Thương mại"},{"d":"2026-07-31","u":"FAC1","l":"Thiết bị vật tư phụ","c":"M305 - Unit 2","s":"Đang xử lý","pt":"Xe tải nhỏ","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-31","u":"FAC1","l":"Thiết bị vật tư phụ","c":"M305 - Unit 2","s":"Đang xử lý","pt":"Xe tải nhỏ","ly":"Mang hoàng hóa sang Tổ Hợp Thử"},{"d":"2026-07-31","u":"AMECC GT","l":"Bán thành phẩm","c":"M313, U284, A290, E307","s":"Hoàn thành","pt":"Xe","ly":"Lấy bán thành phẩm về phục vụ sản xuất"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"FAC1","l":"Máy móc thiết bị","c":"M296","s":"Hoàn thành","pt":"...............................","ly":"Phục vụ gia công chế tạo"},{"d":"2026-07-31","u":"GREEN TECH","l":"Kết cấu thép","c":"B272","s":"Đang xử lý","pt":"15C-44132","ly":"Chuyển kết cấu sang GT nhúng mạ, tổ hợp"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"AMECC GT","l":"Vật tư sơn","c":"M304","s":"Hoàn thành","pt":"Xe tự hành","ly":"Sơn DA M304"},{"d":"2026-07-31","u":"PLB","l":"Thép cuộn PL2x1219xC","c":"M304, U284","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"Mang thép cuộn đi xả"},{"d":"2026-07-31","u":"IRB","l":"Linner","c":"U302","s":"Đang xử lý","pt":"Xe Máy","ly":"Lấy vật tư phục vụ dự án U302"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"},{"d":"2026-07-31","u":"PAC","l":"Kết cấu thép","c":"U302","s":"Hoàn thành","pt":"Xe đầu kéo","ly":"chuyển hàng"}];
+/* ══════════════════════════════════════════════════════════════════════════
+   NGUỒN DỮ LIỆU — đọc TRỰC TIẾP từ Google Sheet mỗi lần mở trang
+   ──────────────────────────────────────────────────────────────────────────
+   Sheet: docs.google.com/spreadsheets/d/1Y2PzDgiw4NRXyHt10_gkGWL27YrdA3F1sk-9AoxPZik
+     • Tab "Phiếu xe"   → bảng phiếu (mỗi dòng = 1 phiếu mang hàng ra cổng)
+     • Tab "PX_Dự án"   → bảng nối phiếu ↔ công trình/dự án (1 phiếu có thể
+                           thuộc nhiều dự án ⇒ nhiều dòng cùng 1 mã phiếu)
+   Điều kiện: sheet phải mở "Chia sẻ → Bất kỳ ai có đường liên kết → Người xem".
+   Trang gọi Google Visualization API bằng thẻ <script> (JSONP) nên không vướng
+   CORS — chạy được cả khi mở file trực tiếp bằng file://
+   ══════════════════════════════════════════════════════════════════════════ */
 
-const fmt = n => new Intl.NumberFormat('vi-VN').format(Math.round(n));
-const pct = (n,d) => d===0 ? '0%' : (n/d*100).toFixed(1)+'%';
+const SHEET_ID     = '1Y2PzDgiw4NRXyHt10_gkGWL27YrdA3F1sk-9AoxPZik';
+const MAIN_SHEET   = 'Phiếu xe';     // tab chính — phải khớp CHÍNH XÁC tên tab
+const MAIN_GID     = '';             // để trống thì đọc theo tên tab ở trên
+const PROJECT_TAB  = { sheet:'PX_Dự án', valueKw:['cong trinh du an','ten du an','ma du an','cong trinh','du an','project'] };
+
+const AUTO_REFRESH_MINUTES = 10;     // tự tải lại sau N phút; 0 = tắt
+const DATE_FIELD  = 'd';             // 'd' = ngay_tao · 'gra' = giờ đề nghị mang ra
+const DETAIL_LIMIT = 400;            // số dòng tối đa dựng ra bảng chi tiết
+
+/* Gợi ý cột: tên nào khớp CHÍNH XÁC tiêu đề trong sheet thì dùng luôn,
+   không khớp thì rơi về tự dò theo từ khóa ở FIELD_DEFS. '' = luôn tự dò. */
+const COLUMN_OVERRIDE = {
+  d : 'ngay_tao',
+  u : 'don_vi_de_nghi',
+  l : 'loai_hang_hoa',
+  c : 'cong_trinh_du_an',
+  s : 'trang_thai',
+  pt: 'phuong_tien',
+  ly: 'ly_do'
+};
+
+const FIELD_DEFS = [
+  { k:'d',  label:'Ngày',          kw:['ngay tao','ngay ra','ngay mang ra','ngay mang','ngay lap','ngay de nghi','ngay chung tu','ngay thang','thoi gian','ngay','date'] },
+  { k:'u',  label:'Đơn vị',        kw:['don vi de nghi','don vi yeu cau','don vi','bo phan','phong ban','to doi','unit','department','dept'] },
+  { k:'c',  label:'Công trình',    kw:['cong trinh du an','ma cong trinh','ten cong trinh','cong trinh','du an','ma ct','ma du an','project','job no'] },
+  { k:'s',  label:'Trạng thái',    kw:['trang thai','tinh trang','status','ket qua'] },
+  { k:'pt', label:'Phương tiện',   kw:['phuong tien','loai xe','so xe','vehicle'] },
+  { k:'l',  label:'Loại hàng hóa', kw:['loai hang hoa','ten hang hoa','loai hang','ten hang','hang hoa','ten vat tu','vat tu','san pham','loai','hang'] },
+  { k:'ly', label:'Lý do',         kw:['ly do','muc dich','noi dung cong viec','noi dung','dien giai','mo ta','reason','note'] }
+];
+const EXTRA_DEFS = [
+  { k:'id',    label:'Mã phiếu',           kw:['phieu id','ma phieu','so phieu','id phieu','id'] },
+  { k:'ten',   label:'Tên phiếu',          kw:['ten phieu'] },
+  { k:'khoi',  label:'Khối',               kw:['khoi hien tai','khoi'] },
+  { k:'hm',    label:'Hạng mục',           kw:['hang muc'] },
+  { k:'dd',    label:'Địa điểm đến',       kw:['dia diem den','dia diem','noi den'] },
+  { k:'bks',   label:'Biển kiểm soát',     kw:['bien kiem soat','bien so'] },
+  { k:'nguoi', label:'Người điều khiển',   kw:['nguoi dieu khien','lai xe','tai xe'] },
+  { k:'gra',   label:'Giờ mang ra',        kw:['gio de nghi mang ra','gio mang ra','gio ra'] },
+  { k:'gvao',  label:'Giờ mang vào',       kw:['gio de nghi mang vao','gio mang vao','gio vao'] },
+  { k:'pl',    label:'Phân loại hàng hóa', kw:['phan loai hang hoa','phan loai'] },
+  { k:'ql',    label:'Quản lý phụ trách',  kw:['quan ly phu trach','quan ly'] }
+];
+const ALL_DEFS = FIELD_DEFS.concat(EXTRA_DEFS);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TIỆN ÍCH
+   ══════════════════════════════════════════════════════════════════════════ */
+const fmt  = n => new Intl.NumberFormat('vi-VN').format(Math.round(n));
+const pct  = (n,d) => !d ? '0%' : (n/d*100).toFixed(1)+'%';
 const pad2 = n => String(n).padStart(2,'0');
+const $    = id => document.getElementById(id);
+const esc  = s => String(s==null?'':s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
-/* ── Mở rộng dữ liệu: dữ liệu thật chỉ có đến 31/07 — sinh thêm dữ liệu minh
-   họa cho các ngày từ 01/08 đến HÔM NAY, lấy mẫu từ chính đơn vị/loại hàng
-   hóa/công trình/phương tiện/lý do đã có trong dữ liệu thật (không bịa danh
-   mục mới) để bộ lọc tuần phản ánh đúng tới thời điểm hiện tại năm 2026. */
-function mulberry32(seed){
-  return function(){
-    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
+/** Bỏ dấu tiếng Việt + chuẩn hóa để so khớp tên cột. */
+function deburr(s){
+  return String(s==null?'':s)
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/đ/g,'d')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
 }
-function seedFromString(s){ let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0; return h; }
 
-(function extendRecordsToToday(){
-  const lastReal = RECORDS.reduce((m,r)=> r.d>m?r.d:m, RECORDS[0].d);
-  const today = new Date();
-  const todayYmd = `${today.getFullYear()}-${pad2(today.getMonth()+1)}-${pad2(today.getDate())}`;
-  if(todayYmd <= lastReal) return;
+/** Lấy 'HH:MM' trong một ô bất kỳ (vd '09:00 30/07/2026'). '' nếu không có. */
+function hhmm(v){
+  if(v==null) return '';
+  const s = String(v);
+  let m = s.match(/^Date\(\d+,\d+,\d+,(\d+),(\d+)/);
+  if(m) return `${pad2(m[1])}:${pad2(m[2])}`;
+  m = s.match(/(\d{1,2}):(\d{2})/);
+  return m ? `${pad2(m[1])}:${m[2]}` : '';
+}
 
-  const pool = RECORDS.filter(r => r.s==='Hoàn thành' || r.s==='Đang xử lý');
-  const pick = (rand, arr) => arr[Math.floor(rand()*arr.length)];
+/** Chuẩn hóa mọi kiểu ngày về 'YYYY-MM-DD'. null nếu không đọc được. */
+function parseDate(v){
+  if(v==null || v==='') return null;
+  if(v instanceof Date && !isNaN(v)) return `${v.getFullYear()}-${pad2(v.getMonth()+1)}-${pad2(v.getDate())}`;
+  const s = String(v).trim()
+    .replace(/^\d{1,2}:\d{2}(:\d{2})?\s+/, '')
+    .replace(/\s+\d{1,2}:\d{2}(:\d{2})?$/, '')
+    .trim();
+  let m;
+  if((m = s.match(/^Date\((\d+),(\d+),(\d+)/)))              return `${m[1]}-${pad2(+m[2]+1)}-${pad2(m[3])}`;
+  if((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)))  return `${m[1]}-${pad2(m[2])}-${pad2(m[3])}`;
+  if((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)))  return `${m[3]}-${pad2(m[2])}-${pad2(m[1])}`;
+  if((m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/))) return `20${m[3]}-${pad2(m[2])}-${pad2(m[1])}`;
+  const d = new Date(s);
+  return isNaN(d) ? null : `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
 
-  let cur = new Date(lastReal+'T00:00:00Z');
-  cur.setUTCDate(cur.getUTCDate()+1);
-  const end = new Date(todayYmd+'T00:00:00Z');
-  while(cur <= end){
-    const ymd = cur.toISOString().slice(0,10);
-    const dow = cur.getUTCDay();
-    if(dow !== 0){
-      const rand = mulberry32(seedFromString('EXT|'+ymd));
-      const base = dow===6 ? 8 : 18;
-      const n = Math.max(0, Math.round(base + (rand()-0.5)*6));
-      for(let i=0;i<n;i++){
-        const src = pick(rand, pool);
-        const roll = rand();
-        const s = roll<0.94 ? 'Hoàn thành' : (roll<0.995 ? 'Đang xử lý' : 'Từ chối/Hủy');
-        RECORDS.push({ d:ymd, u:src.u, l:src.l, c:src.c, s, pt:src.pt, ly:src.ly });
-      }
-    }
-    cur.setUTCDate(cur.getUTCDate()+1);
-  }
-})();
+/** Quy trạng thái thô trong sheet về 3 nhóm chuẩn dùng xuyên suốt báo cáo. */
+function normStatus(s){
+  const t = deburr(s);
+  if(!t) return 'Đang xử lý';
+  if(/hoan thanh|hoan tat|da xong|^xong|da duyet|da phe duyet|da ra cong|done|complete|approved|closed/.test(t)) return 'Hoàn thành';
+  if(/tu choi|khong duyet|huy|da huy|reject|cancel|denied/.test(t)) return 'Từ chối/Hủy';
+  return 'Đang xử lý';
+}
 
-/* ── Tuần lịch ISO-8601 thật (Thứ 2 đầu tuần) — đúng theo lịch treo tường
-   năm 2026, KHÔNG phải "ngày 1-7 trong tháng = tuần 1". */
+/* ── Tuần lịch ISO-8601 thật (Thứ 2 đầu tuần) — đúng lịch treo tường, một
+   tuần có thể vắt qua 2 tháng. ─────────────────────────────────────────── */
 function isoWeekInfo(ymd){
   const [y,m,d] = ymd.split('-').map(Number);
   const date = new Date(Date.UTC(y, m-1, d));
@@ -457,9 +590,8 @@ function prevWeekKey(weekKey){
   const ymd = `${prevMon.getUTCFullYear()}-${pad2(prevMon.getUTCMonth()+1)}-${pad2(prevMon.getUTCDate())}`;
   return weekKeyOf(ymd);
 }
-/* Số ngày đã "trôi qua" trong 1 tuần tính đến hôm nay — tuần đã qua thì đủ 7
-   ngày, tuần hiện tại (đang chạy dở) chỉ tính đến hôm nay, để "bình quân/
-   ngày" không bị pha loãng bởi các ngày chưa tới. */
+/** Số ngày đã trôi qua trong tuần tính đến hôm nay — tuần đang chạy dở chỉ
+    tính tới hôm nay để "bình quân/ngày" không bị pha loãng. */
 function daysElapsedInWeek(weekKey){
   const [y,w] = weekKey.split('-W').map(Number);
   const mon = isoWeekMonday(y,w);
@@ -473,20 +605,6 @@ function daysElapsedInWeek(weekKey){
 function daysInRange(startStr, endStr){
   return Math.round((new Date(endStr+'T00:00:00Z') - new Date(startStr+'T00:00:00Z'))/86400000) + 1;
 }
-function periodRange(){
-  if(state.period==='all'){
-    const dates = RECORDS.map(r=>r.d).sort();
-    return [dates[0], dates[dates.length-1]];
-  }
-  const [y,w] = state.period.split('-W').map(Number);
-  const mon = isoWeekMonday(y,w);
-  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
-  const now = new Date();
-  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  const cap = sun < today ? sun : today;
-  const f = dt => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth()+1)}-${pad2(dt.getUTCDate())}`;
-  return [f(mon), f(cap < mon ? mon : cap)];
-}
 function enumerateDates(startStr, endStr){
   const arr = [];
   let cur = new Date(startStr+'T00:00:00Z');
@@ -498,206 +616,607 @@ function enumerateDates(startStr, endStr){
   return arr;
 }
 
-RECORDS.forEach(r=>r.w = weekKeyOf(r.d));
+/* ══════════════════════════════════════════════════════════════════════════
+   TẢI DỮ LIỆU TỪ GOOGLE SHEET (JSONP — không vướng CORS)
+   ══════════════════════════════════════════════════════════════════════════ */
+function loadGviz(params){
+  return new Promise((resolve, reject) => {
+    const cb = '__gviz_cb_' + Math.random().toString(36).slice(2);
+    const el = document.createElement('script');
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('Hết thời gian chờ (20 giây) khi kết nối Google Sheet.'));
+    }, 20000);
 
-const WEEKS = [...new Set(RECORDS.map(r=>r.w))].sort();
-const periodSel = document.getElementById('periodFilter');
-{
-  const optAll = document.createElement('option');
-  optAll.value = 'all'; optAll.textContent = 'Toàn bộ (đến hiện tại)';
-  periodSel.appendChild(optAll);
-  [...WEEKS].reverse().forEach(wk=>{
-    const opt = document.createElement('option'); opt.value = wk; opt.textContent = weekLabel(wk);
-    periodSel.appendChild(opt);
-  });
-  periodSel.value = WEEKS[WEEKS.length-1];
-}
+    function cleanup(){
+      clearTimeout(timer);
+      try{ delete window[cb]; }catch(e){ window[cb] = undefined; }
+      if(el.parentNode) el.parentNode.removeChild(el);
+    }
 
-const state = { period: WEEKS[WEEKS.length-1], unit:'all', project:'all', status:'all' };
+    window[cb] = res => {
+      cleanup();
+      if(!res || res.status === 'error'){
+        const msg = ((res && res.errors) || []).map(e => e.detailed_message || e.message).join(' — ');
+        reject(new Error(msg || 'Google từ chối truy vấn (sheet chưa mở quyền xem?).'));
+        return;
+      }
+      resolve(res.table);
+    };
+    el.onerror = () => { cleanup(); reject(new Error('Không kết nối được tới docs.google.com.')); };
 
-const units = [...new Set(RECORDS.map(r=>r.u))].sort((a,b)=> {
-  const ca = RECORDS.filter(x=>x.u===a).length, cb = RECORDS.filter(x=>x.u===b).length;
-  return cb-ca;
-});
-const unitSel = document.getElementById('unitFilter');
-units.forEach(u=>{
-  const opt = document.createElement('option'); opt.value=u; opt.textContent=u;
-  unitSel.appendChild(opt);
-});
-
-const projects = [...new Set(RECORDS.map(r=>r.c))].sort((a,b)=> {
-  const ca = RECORDS.filter(x=>x.c===a).length, cb = RECORDS.filter(x=>x.c===b).length;
-  return cb-ca;
-});
-const projectSel = document.getElementById('projectFilter');
-projects.forEach(p=>{
-  const opt = document.createElement('option'); opt.value=p; opt.textContent=p;
-  projectSel.appendChild(opt);
-});
-
-function getFiltered(){
-  return RECORDS.filter(r=>{
-    if(state.period!=='all' && r.w!==state.period) return false;
-    if(state.unit!=='all' && r.u!==state.unit) return false;
-    if(state.project!=='all' && r.c!==state.project) return false;
-    if(state.status!=='all' && r.s!==state.status) return false;
-    return true;
+    const qs = Object.entries(params).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+    el.src = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq`
+           + `?${qs}&tqx=responseHandler:${cb}&_=${Date.now()}`;
+    document.head.appendChild(el);
   });
 }
 
+/** Ghép bảng gviz thành { headers:[], rows:[[]] }. */
+function tableToGrid(table){
+  const headers = (table.cols || []).map((c,i) => {
+    const lb = (c.label || '').trim();
+    return lb || (c.id || 'Cột ' + (i+1));
+  });
+  const rows = (table.rows || []).map(r =>
+    (r.c || []).map(cell => {
+      if(!cell) return '';
+      if(cell.v != null && cell.v !== '') return cell.v;
+      return cell.f != null ? cell.f : '';
+    })
+  );
+  return { headers, rows };
+}
+
+/** Dò cột theo tên tiêu đề; cột nào đã dùng thì không gán lại. */
+function detectColumns(headers){
+  const norm  = headers.map(deburr);
+  const map   = {};
+  const taken = new Set();
+
+  for(const f of ALL_DEFS){                       // ưu tiên phần ghi đè thủ công
+    const want = (COLUMN_OVERRIDE[f.k] || '').trim();
+    if(!want) continue;
+    const i = norm.indexOf(deburr(want));
+    if(i >= 0){ map[f.k] = i; taken.add(i); }
+  }
+  for(const f of ALL_DEFS){
+    if(map[f.k] != null) continue;
+    let found = -1;
+    for(const exact of [true,false]){             // vòng 1 khớp tuyệt đối, vòng 2 chứa từ khóa
+      for(const kw of f.kw){
+        for(let i=0;i<norm.length;i++){
+          if(taken.has(i) || !norm[i]) continue;
+          if(exact ? norm[i] === kw : norm[i].includes(kw)){ found = i; break; }
+        }
+        if(found >= 0) break;
+      }
+      if(found >= 0) break;
+    }
+    if(found >= 0){ map[f.k] = found; taken.add(found); }
+  }
+  return map;
+}
+
+/** Biến grid + mapping thành mảng bản ghi dùng cho toàn bộ dashboard. */
+function gridToRecords(grid, map){
+  const get = (row,k) => map[k] == null ? '' : String(row[map[k]] == null ? '' : row[map[k]]).trim();
+  const out = [];
+  let skipped = 0;
+  const dateKeys = (DATE_FIELD === 'gra' ? ['gra','d'] : ['d','gra']).filter(k => map[k] != null);
+
+  for(const row of grid.rows){
+    if(!row.some(c => String(c==null?'':c).trim() !== '')) continue;   // dòng trống
+    let d = null;
+    for(const k of dateKeys){ d = parseDate(row[map[k]]); if(d) break; }
+    if(!d){ skipped++; continue; }
+    const sRaw = get(row,'s');
+    out.push({
+      d,
+      w    : weekKeyOf(d),
+      u    : get(row,'u') || 'Không rõ',
+      l    : get(row,'l') || 'Không rõ',
+      c    : get(row,'c') || 'Không rõ',
+      sRaw,
+      s    : normStatus(sRaw),
+      pt   : get(row,'pt'),
+      ly   : get(row,'ly'),
+      id   : get(row,'id'),
+      ten  : get(row,'ten'),
+      khoi : get(row,'khoi'),
+      hm   : get(row,'hm'),
+      dd   : get(row,'dd'),
+      bks  : get(row,'bks'),
+      nguoi: get(row,'nguoi'),
+      gra  : hhmm(map.gra  == null ? '' : row[map.gra]),
+      gvao : hhmm(map.gvao == null ? '' : row[map.gvao]),
+      pl   : get(row,'pl'),
+      ql   : get(row,'ql')
+    });
+  }
+  out.sort((a,b) => a.d.localeCompare(b.d));
+  return { records: out, skipped };
+}
+
+/**
+ * Đọc tab "PX_Dự án" dạng (mã phiếu, dự án) thành { mã_phiếu: [dự án, ...] }.
+ * Một phiếu nằm ở nhiều dự án ⇒ nhiều dòng ⇒ gom thành mảng, bỏ trùng.
+ */
+async function loadProjectMap(cfg){
+  const grid = tableToGrid(await loadGviz({ sheet: cfg.sheet, headers: 1 }));
+  const norm = grid.headers.map(deburr);
+
+  let iId = norm.findIndex(h => ['phieu id','ma phieu','so phieu','id phieu','phieu xe','id'].includes(h));
+  if(iId < 0) iId = norm.findIndex(h => h.includes('phieu'));
+  if(iId < 0) iId = 0;
+
+  let iVal = -1;
+  for(const kw of cfg.valueKw){
+    iVal = norm.findIndex((h,i) => i !== iId && h.includes(kw));
+    if(iVal >= 0) break;
+  }
+  if(iVal < 0) iVal = norm.findIndex((_,i) => i !== iId);
+  if(iVal < 0) return { map:{}, links:0, headers:grid.headers };
+
+  const map = {};
+  let links = 0;
+  for(const row of grid.rows){
+    const id = String(row[iId]  == null ? '' : row[iId]).trim();
+    const v  = String(row[iVal] == null ? '' : row[iVal]).trim();
+    if(!id || !v) continue;
+    if(!map[id]) map[id] = [];
+    if(!map[id].includes(v)){ map[id].push(v); links++; }
+  }
+  return { map, links, headers:grid.headers, idCol:grid.headers[iId], valCol:grid.headers[iVal] };
+}
+
+/** Gắn danh sách dự án từ PX_Dự án vào từng phiếu; thiếu thì lùi về cột ở tab chính. */
+function applyProjects(records, projMap){
+  for(const r of records){
+    const list = r.id && projMap && projMap[r.id];
+    r.cs   = (list && list.length) ? list.slice() : [r.c || 'Không rõ'];
+    r.cTxt = r.cs.join(', ');
+  }
+}
+
+/** Thử headers=1..4 để xử lý sheet có dòng tiêu đề gộp / dòng trống phía trên. */
+async function fetchSheet(){
+  let best = null, lastErr = null;
+  const target = MAIN_GID ? { gid: MAIN_GID } : { sheet: MAIN_SHEET };
+
+  for(const hr of [1,2,3,4]){
+    let table;
+    try{
+      table = await loadGviz(Object.assign({}, target, { headers: hr }));
+    }catch(e){
+      lastErr = e;
+      if(hr === 1) throw e;          // lỗi kết nối/quyền — thử tiếp cũng vô ích
+      break;
+    }
+    const grid = tableToGrid(table);
+    if(!grid.rows.length && !grid.headers.length) continue;
+    const map   = detectColumns(grid.headers);
+    const built = gridToRecords(grid, map);
+    const score = Object.keys(map).length * 1000 + built.records.length;
+    if(!best || score > best.score) best = Object.assign({ score, grid, map, headerRows:hr }, built);
+    if(map.d != null && Object.keys(map).length >= 4 && built.records.length) break;
+  }
+
+  if(!best) throw (lastErr || new Error('Không đọc được dữ liệu từ sheet.'));
+  if(best.map.d == null && best.map.gra == null)
+    throw new Error('Không tìm thấy cột NGÀY trong tab "'+MAIN_SHEET+'". Các tiêu đề đọc được: '
+      + best.grid.headers.filter(Boolean).join(' | '));
+  if(!best.records.length)
+    throw new Error('Tab "'+MAIN_SHEET+'" không có dòng dữ liệu nào có ngày hợp lệ.');
+
+  // Tab PX_Dự án — hỏng hoặc rỗng thì bỏ qua, báo cáo vẫn chạy bằng tab chính
+  let projInfo = null, projWarn = null;
+  if(best.map.id != null){
+    try{
+      const res = await loadProjectMap(PROJECT_TAB);
+      if(res.links){
+        applyProjects(best.records, res.map);
+        projInfo = res;
+      }else{
+        projWarn = 'Tab "'+PROJECT_TAB.sheet+'" không có dòng nối nào — dùng cột công trình ở tab chính.';
+      }
+    }catch(e){
+      projWarn = 'Không đọc được tab "'+PROJECT_TAB.sheet+'": ' + e.message;
+    }
+  }else{
+    projWarn = 'Tab "'+MAIN_SHEET+'" không có cột mã phiếu nên không nối được với "'+PROJECT_TAB.sheet+'".';
+  }
+  if(!projInfo) applyProjects(best.records, null);
+
+  return Object.assign(best, { projInfo, projWarn });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TRẠNG THÁI ỨNG DỤNG
+   ══════════════════════════════════════════════════════════════════════════ */
+let RECORDS = [];
+let COLMAP  = {};
+let HEADERS = [];
+let SKIPPED = 0;
+let PROJ_INFO = null, PROJ_WARN = null;
+let firstLoad = true;
+
+/* Bộ lọc: 4 ô chọn ở đầu trang + 2 lát cắt sinh ra khi bấm vào biểu đồ/bảng
+   (goods = loại hàng hóa, day = một ngày trên đường xu hướng). */
+const state = { period:'all', unit:'all', project:'all', status:'all', goods:'all', day:'all' };
+const sortState = { type:'desc', project:'desc' };
+let searchTerm = '';
+let actualInputTouched = false;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THANH TRẠNG THÁI / LỖI
+   ══════════════════════════════════════════════════════════════════════════ */
+function setStatus(kind, text){
+  const el = $('syncTime');
+  el.className = 'sync-time ' + ({loading:'is-load', error:'is-error'}[kind] || '');
+  el.textContent = text;
+  $('btnRefresh').disabled = (kind === 'loading');
+}
+function showError(err){
+  const box = $('errBox');
+  box.style.display = '';
+  box.innerHTML = `
+    <h3>⚠ Không tải được dữ liệu từ Google Sheet</h3>
+    <div>${esc(err && err.message || err)}</div>
+    <ol>
+      <li>Mở sheet → <b>Chia sẻ</b> → <b>Bất kỳ ai có đường liên kết</b> → quyền <b>Người xem</b>.</li>
+      <li>Kiểm tra tên tab <code>${esc(MAIN_SHEET)}</code> và <code>${esc(PROJECT_TAB.sheet)}</code> khớp chính xác với tên hiển thị dưới đáy Google Sheet.</li>
+      <li>Nếu mạng công ty chặn <code>docs.google.com</code>, mở trang bằng mạng khác.</li>
+      <li>Bấm <b>⟳ Làm mới</b> để thử lại.</li>
+    </ol>`;
+}
+const clearError = () => { $('errBox').style.display = 'none'; };
+
+/** In bảng ghép cột ra Console (F12) để đối chiếu khi sheet đổi cấu trúc. */
+function logDiagnostics(){
+  console.groupCollapsed('[AMECC] Ghép cột Google Sheet → báo cáo');
+  console.table(ALL_DEFS.map(f => ({
+    'Trường'   : f.label,
+    'Cột sheet': COLMAP[f.k] != null ? HEADERS[COLMAP[f.k]] : '— không có —',
+    'Vị trí'   : COLMAP[f.k] != null ? 'cột ' + (COLMAP[f.k]+1) : ''
+  })));
+  if(SKIPPED) console.warn(SKIPPED + ' dòng bị bỏ qua vì không đọc được ngày hợp lệ.');
+  if(PROJ_INFO) console.info(`Tab "${PROJECT_TAB.sheet}": ${PROJ_INFO.links} dòng nối · mã phiếu = "${PROJ_INFO.idCol}" · dự án = "${PROJ_INFO.valCol}"`);
+  if(PROJ_WARN) console.warn(PROJ_WARN);
+  console.groupEnd();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BỘ LỌC + CROSS-FILTER (mọi biểu đồ ăn chung 1 bộ lọc, kiểu Power BI)
+   ──────────────────────────────────────────────────────────────────────────
+   Mỗi visual tính số liệu bằng TẤT CẢ bộ lọc TRỪ chiều của chính nó — đúng
+   cách Power BI xử lý: bấm 1 cột trên biểu đồ đơn vị thì biểu đồ đơn vị vẫn
+   hiện đủ các đơn vị (cột được chọn sáng, còn lại mờ đi), trong khi KPI, xu
+   hướng, bảng và donut đối soát đều lọc theo đơn vị đó.
+   ══════════════════════════════════════════════════════════════════════════ */
+const DIM_LABEL = { period:'Kỳ', unit:'Đơn vị', project:'Công trình', status:'Trạng thái', goods:'Loại hàng hóa', day:'Ngày' };
+
+function matchDim(r, dim){
+  const v = state[dim];
+  if(v === 'all') return true;
+  switch(dim){
+    case 'period':  return r.w === v;
+    case 'unit':    return r.u === v;
+    case 'project': return r.cs.includes(v);
+    case 'status':  return r.s === v;
+    case 'goods':   return r.l === v;
+    case 'day':     return r.d === v;
+  }
+  return true;
+}
+/** except: tên chiều bị bỏ qua (để visual của chiều đó vẫn thấy đủ hạng mục). */
+function filterRecords(except){
+  const dims = ['period','unit','project','status','goods','day'].filter(d => d !== except);
+  return RECORDS.filter(r => dims.every(d => matchDim(r, d)));
+}
+
+function setDim(dim, value){
+  state[dim] = value;
+  if(dim === 'period') state.day = 'all';
+  syncSelects();
+  renderAll();
+}
+/** Bấm lại đúng hạng mục đang chọn thì bỏ chọn — hành vi quen thuộc của Power BI. */
+function toggleDim(dim, value){
+  setDim(dim, state[dim] === value ? 'all' : value);
+}
+
+function syncSelects(){
+  const setVal = (sel, v) => {
+    if([...sel.options].some(o => o.value === v)) sel.value = v;
+    else sel.value = 'all';
+  };
+  setVal($('periodFilter'),  state.period);
+  setVal($('unitFilter'),    state.unit);
+  setVal($('projectFilter'), state.project);
+  setVal($('statusFilter'),  state.status);
+}
+
+function renderXfBar(){
+  const bar = $('xfBar');
+  const active = ['unit','project','status','goods','day']
+    .filter(d => state[d] !== 'all')
+    .map(d => ({ dim:d, label:DIM_LABEL[d], value: d==='day' ? dmy(state[d]) : state[d] }));
+
+  if(!active.length){ bar.className = 'xf-bar empty'; bar.innerHTML = ''; return; }
+  bar.className = 'xf-bar';
+  bar.innerHTML =
+    '<span class="xf-label">Đang lọc chéo</span>' +
+    active.map(a => `<span class="xf-chip"><span class="xf-k">${esc(a.label)}:</span>${esc(a.value)}`
+      + `<button data-dim="${a.dim}" title="Bỏ lọc">✕</button></span>`).join('') +
+    '<button class="xf-clear" id="xfClearAll">Xóa toàn bộ lọc chéo</button>' +
+    '<span class="xf-hint">Bấm vào cột / dòng / điểm trên biểu đồ để lọc, bấm lại để bỏ</span>';
+
+  bar.querySelectorAll('.xf-chip button').forEach(b =>
+    b.addEventListener('click', () => setDim(b.dataset.dim, 'all')));
+  $('xfClearAll').addEventListener('click', () => {
+    state.unit = state.project = state.status = state.goods = state.day = 'all';
+    syncSelects(); renderAll();
+  });
+}
+
+const dmy = ymd => { const p = String(ymd).split('-'); return `${p[2]}/${p[1]}/${p[0]}`; };
+
+/* ── Nạp danh sách chọn ─────────────────────────────────────────────────── */
+function fillSelect(sel, options, allLabel, preferred){
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const o0 = document.createElement('option');
+  o0.value = 'all'; o0.textContent = allLabel;
+  sel.appendChild(o0);
+  options.forEach(([v,l]) => {
+    const o = document.createElement('option');
+    o.value = v; o.textContent = l;
+    sel.appendChild(o);
+  });
+  const has = v => [...sel.options].some(o => o.value === v);
+  return sel.value = (has(prev) && prev !== 'all') ? prev
+                   : (preferred && has(preferred) ? preferred : 'all');
+}
+
+function populateFilters(){
+  const weeks = [...new Set(RECORDS.map(r => r.w))].sort().reverse();
+  state.period = fillSelect($('periodFilter'), weeks.map(w => [w, weekLabel(w)]),
+                            'Toàn bộ (đến hiện tại)', firstLoad ? weeks[0] : null);
+
+  const count = (arr, get) => {
+    const m = {};
+    arr.forEach(r => get(r).forEach(v => { m[v] = (m[v]||0)+1; }));
+    return Object.entries(m).sort((a,b) => b[1]-a[1]).map(x => [x[0], x[0]]);
+  };
+  state.unit    = fillSelect($('unitFilter'),    count(RECORDS, r => [r.u]),  'Tất cả đơn vị');
+  state.project = fillSelect($('projectFilter'), count(RECORDS, r => r.cs),   'Tất cả công trình');
+
+  const statuses = [...new Set(RECORDS.map(r => r.s))];
+  const order = ['Hoàn thành','Đang xử lý','Từ chối/Hủy'].filter(s => statuses.includes(s));
+  state.status = fillSelect($('statusFilter'), order.map(s => [s,s]), 'Tất cả');
+
+  firstLoad = false;
+}
+
+/** Khoảng ngày của kỳ đang chọn (chặn ở hôm nay để không vẽ ngày chưa tới). */
+function periodRange(){
+  if(state.period === 'all'){
+    const dates = RECORDS.map(r => r.d).sort();
+    return dates.length ? [dates[0], dates[dates.length-1]] : [null,null];
+  }
+  const [y,w] = state.period.split('-W').map(Number);
+  const mon = isoWeekMonday(y,w);
+  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
+  const now = new Date();
+  const today = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const cap = sun < today ? sun : today;
+  const f = dt => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth()+1)}-${pad2(dt.getUTCDate())}`;
+  return [f(mon), f(cap < mon ? mon : cap)];
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BIỂU ĐỒ
+   ══════════════════════════════════════════════════════════════════════════ */
 let trendChart, unitChart, gateChart;
 const CHART_FONT = {family:"'Segoe UI', Arial, 'Helvetica Neue', Helvetica, sans-serif", size:10.5};
 Chart.defaults.color = '#5B6472';
 Chart.defaults.font = CHART_FONT;
 Chart.defaults.borderColor = '#E1E5EC';
 
-function buildTrend(data){
-  const range = periodRange();
-  const days = enumerateDates(range[0], range[1]);
-  const counts = days.map(d=>data.filter(r=>r.d===d).length);
-  const labels = days.map(d=>{ const p=d.split('-'); return p[2]+'/'+p[1]; });
+function buildTrend(){
+  const data = filterRecords('day');                 // chiều 'day' không tự lọc chính nó
+  const [s,e] = periodRange();
+  const days = (s && e) ? enumerateDates(s,e) : [];
+  const byDay = {};
+  data.forEach(r => { byDay[r.d] = (byDay[r.d]||0)+1; });
+  const counts = days.map(d => byDay[d]||0);
+  const labels = days.map(d => { const p = d.split('-'); return p[2]+'/'+p[1]; });
 
-  let maxIdx=0, minIdx=0;
-  counts.forEach((c,i)=>{ if(c>counts[maxIdx]) maxIdx=i; if(c<counts[minIdx]) minIdx=i; });
-  const pointColors = counts.map((c,i)=> i===maxIdx ? '#34D399' : (i===minIdx ? '#F26161' : '#3B82F6'));
-  const pointRadii = counts.map((c,i)=> (i===maxIdx || i===minIdx) ? 5 : 2);
+  let maxIdx = 0, minIdx = 0;
+  counts.forEach((c,i) => { if(c>counts[maxIdx]) maxIdx=i; if(c<counts[minIdx]) minIdx=i; });
+  $('alertMax').textContent = counts.length ? `▲ Cao nhất: ${labels[maxIdx]} (${counts[maxIdx]} phiếu)` : '▲ Cao nhất: –';
+  $('alertMin').textContent = counts.length ? `▼ Thấp nhất: ${labels[minIdx]} (${counts[minIdx]} phiếu)` : '▼ Thấp nhất: –';
 
-  document.getElementById('alertMax').textContent = counts.length ? `▲ Cao nhất: ${labels[maxIdx]} (${counts[maxIdx]} phiếu)` : '▲ Cao nhất: –';
-  document.getElementById('alertMin').textContent = counts.length ? `▼ Thấp nhất: ${labels[minIdx]} (${counts[minIdx]} phiếu)` : '▼ Thấp nhất: –';
+  const selIdx = state.day === 'all' ? -1 : days.indexOf(state.day);
+  const pointColors = counts.map((c,i) => {
+    if(selIdx >= 0) return i === selIdx ? '#1B4FBF' : 'rgba(59,130,246,.28)';
+    return i===maxIdx ? '#34D399' : (i===minIdx ? '#F26161' : '#3B82F6');
+  });
+  const pointRadii = counts.map((c,i) => {
+    if(selIdx >= 0) return i === selIdx ? 6 : 2;
+    return (i===maxIdx || i===minIdx) ? 5 : 2;
+  });
 
   if(trendChart) trendChart.destroy();
-  trendChart = new Chart(document.getElementById('trendChart'), {
+  trendChart = new Chart($('trendChart'), {
     type:'line',
     data:{ labels, datasets:[{
       label:'Số phiếu', data:counts, borderColor:'#3B82F6', backgroundColor:'rgba(59,130,246,0.10)',
-      fill:true, tension:.3, pointRadius:pointRadii, pointBackgroundColor:pointColors, borderWidth:2
+      fill:true, tension:.3, pointRadius:pointRadii, pointHoverRadius:6,
+      pointBackgroundColor:pointColors, borderWidth:2
     }]},
     options:{
       responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{titleFont:CHART_FONT, bodyFont:CHART_FONT}},
+      onClick:(evt, els, chart) => {
+        const hit = chart.getElementsAtEventForMode(evt, 'index', {intersect:false}, true);
+        if(hit.length) toggleDim('day', days[hit[0].index]);
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{titleFont:CHART_FONT, bodyFont:CHART_FONT, callbacks:{
+          title: items => items.length ? dmy(days[items[0].dataIndex]) : '',
+          label: item => `${fmt(item.parsed.y)} phiếu — bấm để lọc theo ngày này`
+        }}
+      },
       scales:{
         x:{grid:{display:false}, ticks:{maxRotation:0, autoSkip:true, font:{...CHART_FONT, size:9.5}}},
-        y:{beginAtZero:true, grid:{color:'#E1E5EC'}, ticks:{font:{...CHART_FONT, size:9.5}}}
+        y:{beginAtZero:true, grid:{color:'#E1E5EC'}, ticks:{precision:0, font:{...CHART_FONT, size:9.5}}}
       }
     }
   });
 }
 
-function topN(data, key, n){
-  const m = {};
-  data.forEach(r=>{ m[r[key]] = (m[r[key]]||0)+1; });
-  const arr = Object.entries(m).sort((a,b)=>b[1]-a[1]);
+function topN(pairs, n){
+  const arr = [...pairs].sort((a,b) => b[1]-a[1]);
   const top = arr.slice(0,n);
-  const restSum = arr.slice(n).reduce((s,x)=>s+x[1],0);
-  if(restSum>0) top.push(['Khác', restSum]);
+  const rest = arr.slice(n).reduce((s,x) => s+x[1], 0);
+  if(rest > 0) top.push(['Khác', rest]);
   return top;
 }
+function countBy(data, get){
+  const m = {};
+  data.forEach(r => get(r).forEach(v => { m[v] = (m[v]||0)+1; }));
+  return Object.entries(m);
+}
 
-function buildUnitChart(data){
-  const top = topN(data,'u',10);
+function buildUnitChart(){
+  const data = filterRecords('unit');
+  const top  = topN(countBy(data, r => [r.u]), 10);
+  const sel  = state.unit;
+  const colors = top.map(x => (sel === 'all' || x[0] === sel) ? '#3B82F6' : 'rgba(59,130,246,.26)');
+
   if(unitChart) unitChart.destroy();
-  unitChart = new Chart(document.getElementById('unitChart'), {
+  unitChart = new Chart($('unitChart'), {
     type:'bar',
-    data:{ labels:top.map(x=>x[0]), datasets:[{ data:top.map(x=>x[1]), backgroundColor:'#3B82F6', borderRadius:4, maxBarThickness:13 }] },
+    data:{ labels:top.map(x=>x[0]), datasets:[{ data:top.map(x=>x[1]), backgroundColor:colors, borderRadius:4, maxBarThickness:13 }] },
     options:{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{titleFont:CHART_FONT, bodyFont:CHART_FONT}},
-      scales:{ x:{beginAtZero:true, grid:{color:'#E1E5EC'}, ticks:{font:{...CHART_FONT, size:9.5}}}, y:{grid:{display:false}, ticks:{font:{...CHART_FONT, size:9.5}}} }
+      onClick:(evt, els) => {
+        if(!els.length) return;
+        const name = top[els[0].index][0];
+        if(name !== 'Khác') toggleDim('unit', name);
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{titleFont:CHART_FONT, bodyFont:CHART_FONT, callbacks:{
+          label: item => `${fmt(item.parsed.x)} phiếu — bấm để lọc theo đơn vị này`
+        }}
+      },
+      scales:{
+        x:{beginAtZero:true, grid:{color:'#E1E5EC'}, ticks:{precision:0, font:{...CHART_FONT, size:9.5}}},
+        y:{grid:{display:false}, ticks:{font:{...CHART_FONT, size:9.5}}}
+      }
     }
   });
 }
 
-const sortState = { type:'desc', project:'desc' };
-
-function groupAll(data, key){
-  const m = {};
-  data.forEach(r=>{ m[r[key]] = (m[r[key]]||0)+1; });
-  return Object.entries(m);
-}
-
-function renderMiniTable(tbodyId, footId, data, key, sortKey){
-  const dir = sortState[sortKey];
-  const rows = groupAll(data, key).sort((a,b)=> dir==='desc' ? b[1]-a[1] : a[1]-b[1]);
-  const tbody = document.getElementById(tbodyId);
+/* ── Hai bảng nhỏ: cũng là visual lọc chéo được ────────────────────────── */
+function renderMiniTable(cfg){
+  const data = filterRecords(cfg.dim);
+  const dir  = sortState[cfg.sortKey];
+  const rows = countBy(data, cfg.get).sort((a,b) => dir==='desc' ? b[1]-a[1] : a[1]-b[1]);
+  const sel  = state[cfg.dim];
+  const tbody = $(cfg.tbodyId);
   tbody.innerHTML = '';
+
+  if(!rows.length){
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-faint);font-style:italic;">Không có dữ liệu</td></tr>';
+    $(cfg.footId).textContent = '0';
+    return;
+  }
   let total = 0;
-  rows.forEach(([name,count], i)=>{
+  rows.forEach(([name,count], i) => {
     total += count;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td class="stt">${i+1}</td><td>${name}</td><td class="num">${fmt(count)}</td>`;
+    if(sel !== 'all') tr.className = (name === sel) ? 'xf-on' : 'xf-off';
+    tr.title = 'Bấm để lọc toàn bộ báo cáo theo "' + name + '"';
+    tr.innerHTML = `<td class="stt">${i+1}</td><td>${esc(name)}</td><td class="num">${fmt(count)}</td>`;
+    tr.addEventListener('click', () => toggleDim(cfg.dim, name));
     tbody.appendChild(tr);
   });
-  document.getElementById(footId).textContent = fmt(total);
+  // Tổng ở đây là tổng LƯỢT xuất hiện: 1 phiếu thuộc 2 dự án được đếm ở cả 2 dòng.
+  $(cfg.footId).textContent = fmt(total);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   KPI
+   ══════════════════════════════════════════════════════════════════════════ */
 function renderKPIs(data){
-  const total = data.length;
-  const done = data.filter(r=>r.s==='Hoàn thành').length;
-  const pending = data.filter(r=>r.s==='Đang xử lý').length;
-  const rate = total ? done/total*100 : 0;
+  const total   = data.length;
+  const done    = data.filter(r => r.s==='Hoàn thành').length;
+  const pending = data.filter(r => r.s==='Đang xử lý').length;
+  const rate    = total ? done/total*100 : 0;
 
   let nDays;
-  if(state.period==='all'){
+  if(state.day !== 'all')            nDays = 1;
+  else if(state.period === 'all'){
     const [s,e] = periodRange();
-    nDays = Math.max(1, daysInRange(s,e));
-  } else {
-    nDays = Math.max(1, daysElapsedInWeek(state.period));
-  }
+    nDays = (s && e) ? Math.max(1, daysInRange(s,e)) : 1;
+  }else                              nDays = Math.max(1, daysElapsedInWeek(state.period));
   const avg = total/nDays;
 
-  document.getElementById('kpiTotal').textContent = fmt(total);
-  document.getElementById('kpiDone').textContent = fmt(done);
-  document.getElementById('kpiPending').textContent = fmt(pending);
-  document.getElementById('kpiRate').textContent = pct(done,total);
-  document.getElementById('kpiAvg').textContent = avg.toFixed(1);
+  $('kpiTotal').textContent   = fmt(total);
+  $('kpiDone').textContent    = fmt(done);
+  $('kpiPending').textContent = fmt(pending);
+  $('kpiRate').textContent    = pct(done,total);
+  $('kpiAvg').textContent     = avg.toFixed(1);
 
   renderKPIDeltas({total, done, pending, rate, avg});
 }
 
-/* So sánh với tuần liền trước (theo tuần lịch ISO thật). Cùng áp dụng các bộ
-   lọc đơn vị/công trình/trạng thái đang chọn để so sánh đúng "táo với táo". */
+/** So sánh với tuần liền trước, cùng áp dụng mọi lát cắt đang bật. */
 function deltaHTML(curr, prev, opts={}){
   const { unit='', decimals=0, isPct=false } = opts;
-  const eps = decimals>0 ? 0.05 : 0.5;
+  const eps  = decimals>0 ? 0.05 : 0.5;
   const diff = curr - prev;
   if(Math.abs(diff) < eps) return `<span class="delta flat">● Không đổi so với tuần trước</span>`;
   const up = diff > 0;
-  const cls = up ? 'up' : 'down';
-  const arrow = up ? '▲' : '▼';
   const diffTxt = (up?'+':'') + diff.toFixed(decimals) + unit;
-  const pctTxt = (!isPct && prev>0) ? ` (${diff/prev*100>=0?'+':''}${(diff/prev*100).toFixed(1)}%)` : '';
-  return `<span class="delta ${cls}">${arrow} ${diffTxt}${pctTxt} so với tuần trước</span>`;
+  const pctTxt  = (!isPct && prev>0) ? ` (${diff/prev*100>=0?'+':''}${(diff/prev*100).toFixed(1)}%)` : '';
+  return `<span class="delta ${up?'up':'down'}">${up?'▲':'▼'} ${diffTxt}${pctTxt} so với tuần trước</span>`;
 }
 
 function renderKPIDeltas(curr){
   const els = {
-    total:   document.getElementById('kpiTotalDelta'),
-    done:    document.getElementById('kpiDoneDelta'),
-    pending: document.getElementById('kpiPendingDelta'),
-    rate:    document.getElementById('kpiRateDelta'),
-    avg:     document.getElementById('kpiAvgDelta'),
+    total:   $('kpiTotalDelta'),   done: $('kpiDoneDelta'), pending: $('kpiPendingDelta'),
+    rate:    $('kpiRateDelta'),    avg:  $('kpiAvgDelta')
   };
-  if(state.period==='all'){
-    Object.values(els).forEach(el=> el.innerHTML = '<span class="delta na">Chọn 1 tuần cụ thể để xem so sánh</span>');
+  if(state.period === 'all'){
+    Object.values(els).forEach(el => el.innerHTML = '<span class="delta na">Chọn 1 tuần cụ thể để xem so sánh</span>');
+    return;
+  }
+  if(state.day !== 'all'){
+    Object.values(els).forEach(el => el.innerHTML = '<span class="delta na">Đang lọc theo 1 ngày cụ thể</span>');
     return;
   }
   const prevKey = prevWeekKey(state.period);
   const prevData = RECORDS.filter(r =>
-       r.w===prevKey
-    && (state.unit==='all'    || r.u===state.unit)
-    && (state.project==='all' || r.c===state.project)
-    && (state.status==='all'  || r.s===state.status));
+       r.w === prevKey
+    && (state.unit==='all'    || r.u === state.unit)
+    && (state.project==='all' || r.cs.includes(state.project))
+    && (state.status==='all'  || r.s === state.status)
+    && (state.goods==='all'   || r.l === state.goods));
 
   if(!prevData.length){
-    Object.values(els).forEach(el=> el.innerHTML = '<span class="delta na">Tuần trước chưa có dữ liệu</span>');
+    Object.values(els).forEach(el => el.innerHTML = '<span class="delta na">Tuần trước chưa có dữ liệu</span>');
     return;
   }
-  const pTotal = prevData.length;
-  const pDone = prevData.filter(r=>r.s==='Hoàn thành').length;
-  const pPending = prevData.filter(r=>r.s==='Đang xử lý').length;
-  const pRate = pTotal ? pDone/pTotal*100 : 0;
-  const pDays = Math.max(1, daysElapsedInWeek(prevKey));
-  const pAvg = pTotal/pDays;
+  const pTotal   = prevData.length;
+  const pDone    = prevData.filter(r => r.s==='Hoàn thành').length;
+  const pPending = prevData.filter(r => r.s==='Đang xử lý').length;
+  const pRate    = pTotal ? pDone/pTotal*100 : 0;
+  const pAvg     = pTotal / Math.max(1, daysElapsedInWeek(prevKey));
 
   els.total.innerHTML   = deltaHTML(curr.total, pTotal);
   els.done.innerHTML    = deltaHTML(curr.done, pDone);
@@ -706,26 +1225,33 @@ function renderKPIDeltas(curr){
   els.avg.innerHTML     = deltaHTML(curr.avg, pAvg, {decimals:1});
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ĐỐI SOÁT CỔNG
+   ──────────────────────────────────────────────────────────────────────────
+   Sheet không có số bảo vệ đếm thực tế nên ô này nhập tay và CHỈ sống trong
+   phiên xem hiện tại. Khi chưa nhập, thực tế = số phiếu trên Base (chênh 0)
+   chứ không bịa số.
+   ══════════════════════════════════════════════════════════════════════════ */
 function renderGateModule(data){
   const base = data.length;
-  let actualVal = parseInt(document.getElementById('actualInput').value, 10);
-  if(!actualVal || isNaN(actualVal)){
-    actualVal = Math.round(base*1.18);
-    document.getElementById('actualInput').value = actualVal;
+  const inp  = $('actualInput');
+  let actualVal = parseInt(inp.value, 10);
+  if(!actualInputTouched || !actualVal || isNaN(actualVal) || actualVal < 0){
+    actualVal = base;
+    inp.value = '';
   }
-  const gap = Math.max(actualVal - base, 0);
+  const gap    = Math.max(actualVal - base, 0);
   const gapPct = actualVal>0 ? (gap/actualVal*100) : 0;
+  const declaredPct = actualVal>0 ? Math.min(base/actualVal*100, 100) : 100;
 
-  const declaredPct = actualVal>0 ? Math.min(base/actualVal*100,100) : 100;
-
-  document.getElementById('donutCenterNum').textContent = fmt(base);
-  document.getElementById('donutCenterSub').textContent = 'trên tổng '+fmt(actualVal)+' lượt/xe ('+declaredPct.toFixed(1)+'%)';
-  document.getElementById('legendBaseVal').textContent = fmt(base)+' phiếu ('+declaredPct.toFixed(1)+'%)';
-  document.getElementById('legendGapVal').textContent = fmt(gap)+' lượt ('+(100-declaredPct).toFixed(1)+'%)';
-  document.getElementById('legendPctVal').textContent = gapPct.toFixed(1)+'%';
+  $('donutCenterNum').textContent = fmt(base);
+  $('donutCenterSub').textContent = 'trên tổng '+fmt(actualVal)+' lượt/xe ('+declaredPct.toFixed(1)+'%)';
+  $('legendBaseVal').textContent  = fmt(base)+' phiếu ('+declaredPct.toFixed(1)+'%)';
+  $('legendGapVal').textContent   = fmt(gap)+' lượt ('+(100-declaredPct).toFixed(1)+'%)';
+  $('legendPctVal').textContent   = gapPct.toFixed(1)+'%';
 
   if(gateChart) gateChart.destroy();
-  gateChart = new Chart(document.getElementById('gateDonut'), {
+  gateChart = new Chart($('gateDonut'), {
     type:'doughnut',
     data:{
       labels:['Phiếu RA (Base Service)','Chưa khai báo'],
@@ -734,76 +1260,131 @@ function renderGateModule(data){
     options:{ responsive:true, maintainAspectRatio:false, cutout:'70%', plugins:{ legend:{display:false} } }
   });
 
-  const ldotPct = document.getElementById('ldotPct');
-  ldotPct.style.background = gapPct < 5 ? 'var(--blue)' : (gapPct < 20 ? 'var(--amber)' : 'var(--red)');
+  $('ldotPct').style.background = gapPct < 5 ? 'var(--blue)' : (gapPct < 20 ? 'var(--amber)' : 'var(--red)');
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   BẢNG CHI TIẾT
+   ══════════════════════════════════════════════════════════════════════════ */
 function statusChip(s){
   if(s==='Hoàn thành') return '<span class="status-chip done">Hoàn thành</span>';
   if(s==='Đang xử lý') return '<span class="status-chip pending">Đang xử lý</span>';
   return '<span class="status-chip rejected">Từ chối/Hủy</span>';
 }
 
-let searchTerm = '';
 function renderDetail(data){
-  const tbody = document.getElementById('detailBody');
-  tbody.innerHTML='';
-  let filtered = data;
+  const tbody = $('detailBody');
+  tbody.innerHTML = '';
+  let rows = data;
   if(searchTerm){
     const q = searchTerm.toLowerCase();
-    filtered = data.filter(r => (r.u+' '+r.c+' '+r.ly+' '+r.l).toLowerCase().includes(q));
+    rows = data.filter(r => (r.u+' '+r.cTxt+' '+r.ly+' '+r.l+' '+r.pt+' '+r.bks+' '+r.nguoi).toLowerCase().includes(q));
   }
-  const sorted = [...filtered].sort((a,b)=> b.d.localeCompare(a.d));
-  sorted.forEach(r=>{
-    const p = r.d.split('-');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="mono">${p[2]}/${p[1]}/${p[0]}</td>
-      <td>${r.u}</td>
-      <td>${r.l}</td>
-      <td>${r.c}</td>
-      <td>${r.pt||'—'}</td>
-      <td>${statusChip(r.s)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+  const sorted = [...rows].sort((a,b) => b.d.localeCompare(a.d));
+  const shown  = sorted.slice(0, DETAIL_LIMIT);
+
+  if(!shown.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-faint);font-style:italic;">Không có phiếu nào khớp bộ lọc hiện tại.</td></tr>';
+  }else{
+    const frag = document.createDocumentFragment();
+    shown.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="mono">${dmy(r.d)}</td>
+        <td>${esc(r.u)}</td>
+        <td>${esc(r.l)}</td>
+        <td>${esc(r.cTxt)}</td>
+        <td>${esc(r.pt || '—')}</td>
+        <td>${statusChip(r.s)}</td>`;
+      frag.appendChild(tr);
+    });
+    tbody.appendChild(frag);
+  }
+  $('detailCount').textContent = sorted.length > DETAIL_LIMIT
+    ? `Hiển thị ${fmt(DETAIL_LIMIT)} / ${fmt(sorted.length)} phiếu`
+    : `${fmt(sorted.length)} phiếu`;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   VẼ TOÀN BỘ
+   ══════════════════════════════════════════════════════════════════════════ */
 function renderAll(){
-  const data = getFiltered();
-  document.getElementById('trendTag').textContent = weekLabel(state.period);
+  const data = filterRecords(null);        // KPI / donut / bảng chi tiết: lọc đầy đủ
+  $('trendTag').textContent = weekLabel(state.period) + (state.day==='all' ? '' : ' · ngày '+dmy(state.day));
+  renderXfBar();
   renderKPIs(data);
-  buildTrend(data);
-  buildUnitChart(data);
-  renderMiniTable('typeTableBody', 'typeTableTotal', data, 'l', 'type');
-  renderMiniTable('projectTableBody', 'projectTableTotal', data, 'c', 'project');
+  buildTrend();
+  buildUnitChart();
+  renderMiniTable({ tbodyId:'typeTableBody',    footId:'typeTableTotal',    dim:'goods',   get:r=>[r.l], sortKey:'type' });
+  renderMiniTable({ tbodyId:'projectTableBody', footId:'projectTableTotal', dim:'project', get:r=>r.cs,  sortKey:'project' });
   renderGateModule(data);
   renderDetail(data);
 }
 
-periodSel.addEventListener('change', e=>{
+/* ══════════════════════════════════════════════════════════════════════════
+   NẠP DỮ LIỆU
+   ══════════════════════════════════════════════════════════════════════════ */
+async function loadData(){
+  setStatus('loading', 'Đang tải dữ liệu từ Google Sheet…');
+  try{
+    const res = await fetchSheet();
+    RECORDS   = res.records;
+    COLMAP    = res.map;
+    HEADERS   = res.grid.headers;
+    SKIPPED   = res.skipped;
+    PROJ_INFO = res.projInfo;
+    PROJ_WARN = res.projWarn;
+
+    clearError();
+    populateFilters();
+    renderAll();
+    logDiagnostics();
+
+    const t = new Date();
+    setStatus('ok', `● ${fmt(RECORDS.length)} phiếu · cập nhật ${pad2(t.getHours())}:${pad2(t.getMinutes())}`
+                  + (PROJ_INFO ? ` · ${fmt(PROJ_INFO.links)} dòng ${PROJECT_TAB.sheet}` : ''));
+  }catch(err){
+    console.error('[AMECC] Lỗi tải dữ liệu:', err);
+    setStatus('error', '⚠ Lỗi kết nối');
+    showError(err);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SỰ KIỆN
+   ══════════════════════════════════════════════════════════════════════════ */
+$('periodFilter').addEventListener('change', e => {
   state.period = e.target.value;
-  document.getElementById('actualInput').value = '';
+  state.day = 'all';                       // đổi kỳ thì lát cắt theo ngày không còn nghĩa
+  actualInputTouched = false; $('actualInput').value = '';
   renderAll();
 });
-unitSel.addEventListener('change', e=>{ state.unit = e.target.value; renderAll(); });
-projectSel.addEventListener('change', e=>{ state.project = e.target.value; renderAll(); });
-document.getElementById('statusFilter').addEventListener('change', e=>{ state.status = e.target.value; renderAll(); });
-document.getElementById('actualInput').addEventListener('input', ()=>{ renderGateModule(getFiltered()); });
-document.getElementById('searchBox').addEventListener('input', e=>{ searchTerm = e.target.value; renderDetail(getFiltered()); });
+$('unitFilter').addEventListener('change',    e => { state.unit    = e.target.value; renderAll(); });
+$('projectFilter').addEventListener('change', e => { state.project = e.target.value; renderAll(); });
+$('statusFilter').addEventListener('change',  e => { state.status  = e.target.value; renderAll(); });
 
-document.getElementById('sortTypeHead').addEventListener('click', ()=>{
+$('actualInput').addEventListener('input', () => {
+  actualInputTouched = $('actualInput').value.trim() !== '';
+  renderGateModule(filterRecords(null));
+});
+$('searchBox').addEventListener('input', e => { searchTerm = e.target.value; renderDetail(filterRecords(null)); });
+
+$('sortTypeHead').addEventListener('click', () => {
   sortState.type = sortState.type==='desc' ? 'asc' : 'desc';
-  document.getElementById('sortTypeHead').textContent = 'Số phiếu ' + (sortState.type==='desc' ? '▾' : '▴');
-  renderMiniTable('typeTableBody', 'typeTableTotal', getFiltered(), 'l', 'type');
+  $('sortTypeHead').textContent = 'Số phiếu ' + (sortState.type==='desc' ? '▾' : '▴');
+  renderMiniTable({ tbodyId:'typeTableBody', footId:'typeTableTotal', dim:'goods', get:r=>[r.l], sortKey:'type' });
 });
-document.getElementById('sortProjectHead').addEventListener('click', ()=>{
+$('sortProjectHead').addEventListener('click', () => {
   sortState.project = sortState.project==='desc' ? 'asc' : 'desc';
-  document.getElementById('sortProjectHead').textContent = 'Số phiếu ' + (sortState.project==='desc' ? '▾' : '▴');
-  renderMiniTable('projectTableBody', 'projectTableTotal', getFiltered(), 'c', 'project');
+  $('sortProjectHead').textContent = 'Số phiếu ' + (sortState.project==='desc' ? '▾' : '▴');
+  renderMiniTable({ tbodyId:'projectTableBody', footId:'projectTableTotal', dim:'project', get:r=>r.cs, sortKey:'project' });
 });
 
-renderAll();
+$('btnRefresh').addEventListener('click', loadData);
+
+if(AUTO_REFRESH_MINUTES > 0) setInterval(loadData, AUTO_REFRESH_MINUTES*60*1000);
+
+loadData();
 </script>
 </body>
 </html>
