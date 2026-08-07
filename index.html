@@ -448,10 +448,31 @@
    CORS — chạy được cả khi mở file trực tiếp bằng file://
    ══════════════════════════════════════════════════════════════════════════ */
 
-const SHEET_ID     = '1Y2PzDgiw4NRXyHt10_gkGWL27YrdA3F1sk-9AoxPZik';
-const MAIN_SHEET   = 'Phiếu xe';     // tab chính — phải khớp CHÍNH XÁC tên tab
-const MAIN_GID     = '';             // để trống thì đọc theo tên tab ở trên
-const PROJECT_TAB  = { sheet:'PX_Dự án', valueKw:['cong trinh du an','ten du an','ma du an','cong trinh','du an','project'] };
+const SHEET_ID = '1Y2PzDgiw4NRXyHt10_gkGWL27YrdA3F1sk-9AoxPZik';
+
+/* CÁCH LẤY gid: mở Google Sheet → bấm vào tab cần lấy → nhìn thanh địa chỉ,
+   phần sau '#gid=' chính là gid của tab đó. Ví dụ …/edit#gid=1557802886
+
+   Vì sao cần gid: các tab ở đây là Connected Sheets (bảng dữ liệu nối từ
+   BigQuery, có biểu tượng ⛁ và nút "Làm mới các tùy chọn"). Loại tab này KHÔNG
+   tra được bằng tên — Google Visualization API không khớp được tên rồi âm thầm
+   trả về TAB ĐẦU TIÊN của file thay vì báo lỗi. Điền gid là cách chắc chắn. */
+const MAIN_TAB = {
+  gid   : '',            // ← ĐIỀN gid CỦA TAB "Phiếu xe" VÀO ĐÂY
+  sheet : 'Phiếu xe',    // chỉ dùng để thử khi chưa có gid
+  label : 'Phiếu xe'
+};
+const PROJECT_TAB = {
+  gid   : '',            // ← ĐIỀN gid CỦA TAB "PX_Dự án" VÀO ĐÂY
+  sheet : 'PX_Dự án',
+  label : 'PX_Dự án',
+  valueKw:['cong trinh du an','ten du an','ma du an','cong trinh','du an','project']
+};
+
+/* Các gid chưa rõ thuộc tab nào — trang thử lần lượt rồi tự nhận ra tab nào là
+   tab nào qua tiêu đề cột, nên đoán sai cũng không sinh số sai: tab không khớp
+   sẽ bị loại chứ không được dùng. Thêm gid vào đây nếu bạn không chắc. */
+const CANDIDATE_GIDS = ['1557802886'];
 
 const AUTO_REFRESH_MINUTES = 10;     // tự tải lại sau N phút; 0 = tắt
 const DATE_FIELD  = 'd';             // 'd' = ngay_tao · 'gra' = giờ đề nghị mang ra
@@ -738,12 +759,68 @@ function gridToRecords(grid, map){
   return { records: out, skipped };
 }
 
+/* ── Nhận diện tab ────────────────────────────────────────────────────────
+   gviz KHÔNG báo lỗi khi không khớp được tên tab — nó lặng lẽ trả về tab đầu
+   tiên của file. Với file này (nhiều tab Connected Sheets: task, tt_nhan_su,
+   CBCNV…) mà cứ tin bừa thì báo cáo sẽ hiện số của tab khác như thể số thật.
+   Nên mọi tab đọc về đều phải qua cửa kiểm tra dưới đây. ─────────────────── */
+function tabFingerprint(headers){ return headers.map(deburr).filter(Boolean); }
+
+/** Tab chính phải có cột ngày HOẶC mã phiếu — đủ để phân biệt với tab khác. */
+function looksLikeMainTab(headers){
+  const h = tabFingerprint(headers);
+  const hasDate = h.some(x => /^ngay/.test(x) || x.includes('ngay tao'));
+  const hasId   = h.some(x => x.includes('phieu'));
+  return hasDate || hasId;
+}
+/** Tab nối phải có cột mã phiếu VÀ một cột công trình/dự án. */
+function looksLikeProjectTab(headers, cfg){
+  const h = tabFingerprint(headers);
+  return h.some(x => x.includes('phieu')) && h.some(x => cfg.valueKw.some(kw => x.includes(kw)));
+}
+
+/**
+ * Đọc một tab: ưu tiên gid (chắc chắn đúng tab), chưa có gid thì thử theo tên.
+ * Tab đọc về không qua được hàm kiểm tra `verify` thì coi như đọc nhầm tab và
+ * báo lỗi rõ ràng, KHÔNG im lặng dùng số của tab khác.
+ */
+async function loadTab(cfg, verify, headerRows){
+  const attempts = [];
+  if(cfg.gid) attempts.push({ by:'gid '+cfg.gid, params:{ gid: cfg.gid } });
+  (CANDIDATE_GIDS || []).forEach(g => {
+    if(g && g !== cfg.gid) attempts.push({ by:'gid '+g, params:{ gid: g } });
+  });
+  if(cfg.sheet) attempts.push({ by:'tên tab', params:{ sheet: cfg.sheet } });
+  if(!attempts.length) throw new Error('Chưa cấu hình gid lẫn tên cho tab "'+cfg.label+'".');
+
+  let lastGrid = null, lastErr = null;
+  for(const a of attempts){
+    for(const hr of (headerRows || [1])){
+      let grid;
+      try{
+        grid = tableToGrid(await loadGviz(Object.assign({}, a.params, { headers: hr })));
+      }catch(e){ lastErr = e; continue; }
+      if(!grid.headers.length && !grid.rows.length) continue;
+      lastGrid = grid;
+      if(verify(grid.headers)) return { grid, by:a.by, headerRows:hr };
+    }
+  }
+  if(lastErr && !lastGrid) throw lastErr;
+  const err = new Error(
+    `Đọc nhầm tab: gọi tab "${cfg.label}" nhưng Google trả về bảng có các cột `
+    + `«${(lastGrid ? lastGrid.headers : []).filter(Boolean).join(' | ')}».`
+    + (cfg.gid ? '' : ` Nguyên nhân thường gặp: tab Connected Sheets không tra được bằng TÊN. Hãy điền gid của tab "${cfg.label}" vào phần cấu hình đầu file.`));
+  err.wrongTab = true;
+  err.headersRead = lastGrid ? lastGrid.headers : [];
+  throw err;
+}
+
 /**
  * Đọc tab "PX_Dự án" dạng (mã phiếu, dự án) thành { mã_phiếu: [dự án, ...] }.
  * Một phiếu nằm ở nhiều dự án ⇒ nhiều dòng ⇒ gom thành mảng, bỏ trùng.
  */
 async function loadProjectMap(cfg){
-  const grid = tableToGrid(await loadGviz({ sheet: cfg.sheet, headers: 1 }));
+  const { grid, by } = await loadTab(cfg, h => looksLikeProjectTab(h, cfg), [1,2]);
   const norm = grid.headers.map(deburr);
 
   let iId = norm.findIndex(h => ['phieu id','ma phieu','so phieu','id phieu','phieu xe','id'].includes(h));
@@ -756,7 +833,7 @@ async function loadProjectMap(cfg){
     if(iVal >= 0) break;
   }
   if(iVal < 0) iVal = norm.findIndex((_,i) => i !== iId);
-  if(iVal < 0) return { map:{}, links:0, headers:grid.headers };
+  if(iVal < 0) return { map:{}, links:0, headers:grid.headers, by };
 
   const map = {};
   let links = 0;
@@ -767,7 +844,7 @@ async function loadProjectMap(cfg){
     if(!map[id]) map[id] = [];
     if(!map[id].includes(v)){ map[id].push(v); links++; }
   }
-  return { map, links, headers:grid.headers, idCol:grid.headers[iId], valCol:grid.headers[iVal] };
+  return { map, links, headers:grid.headers, idCol:grid.headers[iId], valCol:grid.headers[iVal], by };
 }
 
 /** Gắn danh sách dự án từ PX_Dự án vào từng phiếu; thiếu thì lùi về cột ở tab chính. */
@@ -779,52 +856,39 @@ function applyProjects(records, projMap){
   }
 }
 
-/** Thử headers=1..4 để xử lý sheet có dòng tiêu đề gộp / dòng trống phía trên. */
+/** Đọc tab chính (thử headers=1..4 cho sheet có dòng tiêu đề gộp phía trên). */
 async function fetchSheet(){
-  let best = null, lastErr = null;
-  const target = MAIN_GID ? { gid: MAIN_GID } : { sheet: MAIN_SHEET };
+  const { grid, by, headerRows } = await loadTab(MAIN_TAB, looksLikeMainTab, [1,2,3,4]);
 
-  for(const hr of [1,2,3,4]){
-    let table;
-    try{
-      table = await loadGviz(Object.assign({}, target, { headers: hr }));
-    }catch(e){
-      lastErr = e;
-      if(hr === 1) throw e;          // lỗi kết nối/quyền — thử tiếp cũng vô ích
-      break;
-    }
-    const grid = tableToGrid(table);
-    if(!grid.rows.length && !grid.headers.length) continue;
-    const map   = detectColumns(grid.headers);
-    const built = gridToRecords(grid, map);
-    const score = Object.keys(map).length * 1000 + built.records.length;
-    if(!best || score > best.score) best = Object.assign({ score, grid, map, headerRows:hr }, built);
-    if(map.d != null && Object.keys(map).length >= 4 && built.records.length) break;
-  }
+  const map   = detectColumns(grid.headers);
+  const built = gridToRecords(grid, map);
 
-  if(!best) throw (lastErr || new Error('Không đọc được dữ liệu từ sheet.'));
-  if(best.map.d == null && best.map.gra == null)
-    throw new Error('Không tìm thấy cột NGÀY trong tab "'+MAIN_SHEET+'". Các tiêu đề đọc được: '
-      + best.grid.headers.filter(Boolean).join(' | '));
-  if(!best.records.length)
-    throw new Error('Tab "'+MAIN_SHEET+'" không có dòng dữ liệu nào có ngày hợp lệ.');
+  if(map.d == null && map.gra == null)
+    throw new Error('Không tìm thấy cột NGÀY trong tab "'+MAIN_TAB.label+'". Các tiêu đề đọc được: '
+      + grid.headers.filter(Boolean).join(' | '));
+  if(!built.records.length)
+    throw new Error('Tab "'+MAIN_TAB.label+'" không có dòng dữ liệu nào có ngày hợp lệ'
+      + (built.skipped ? ` (${built.skipped} dòng bị bỏ vì không đọc được ngày).` : '.'));
 
-  // Tab PX_Dự án — hỏng hoặc rỗng thì bỏ qua, báo cáo vẫn chạy bằng tab chính
+  const best = Object.assign({ grid, map, headerRows, mainBy:by }, built);
+
+  // Tab PX_Dự án — hỏng, rỗng hay đọc nhầm thì bỏ qua, báo cáo vẫn chạy bằng
+  // tab chính; lý do luôn được ghi lại để không âm thầm mất dữ liệu dự án.
   let projInfo = null, projWarn = null;
-  if(best.map.id != null){
+  if(map.id != null){
     try{
       const res = await loadProjectMap(PROJECT_TAB);
       if(res.links){
         applyProjects(best.records, res.map);
         projInfo = res;
       }else{
-        projWarn = 'Tab "'+PROJECT_TAB.sheet+'" không có dòng nối nào — dùng cột công trình ở tab chính.';
+        projWarn = 'Tab "'+PROJECT_TAB.label+'" không có dòng nối nào — dùng cột công trình ở tab chính.';
       }
     }catch(e){
-      projWarn = 'Không đọc được tab "'+PROJECT_TAB.sheet+'": ' + e.message;
+      projWarn = 'Không đọc được tab "'+PROJECT_TAB.label+'": ' + e.message;
     }
   }else{
-    projWarn = 'Tab "'+MAIN_SHEET+'" không có cột mã phiếu nên không nối được với "'+PROJECT_TAB.sheet+'".';
+    projWarn = 'Tab "'+MAIN_TAB.label+'" không có cột mã phiếu nên không nối được với "'+PROJECT_TAB.label+'".';
   }
   if(!projInfo) applyProjects(best.records, null);
 
@@ -860,12 +924,20 @@ function setStatus(kind, text){
 function showError(err){
   const box = $('errBox');
   box.style.display = '';
+  const wrongTab = err && err.wrongTab;
   box.innerHTML = `
     <h3>⚠ Không tải được dữ liệu từ Google Sheet</h3>
     <div>${esc(err && err.message || err)}</div>
-    <ol>
+    <ol>` + (wrongTab ? `
+      <li><b>Cần điền <code>gid</code>.</b> Mở Google Sheet → bấm vào tab
+          <code>${esc(MAIN_TAB.label)}</code> → sao chép dãy số sau <code>#gid=</code> trên thanh địa chỉ
+          → dán vào <code>MAIN_TAB.gid</code> ở đầu thẻ <code>&lt;script&gt;</code> của file này.
+          Làm tương tự cho tab <code>${esc(PROJECT_TAB.label)}</code> → <code>PROJECT_TAB.gid</code>.</li>
+      <li>Các tab dạng <b>Connected Sheets</b> (có biểu tượng ⛁ và nút "Làm mới các tùy chọn")
+          không tra được bằng tên tab, bắt buộc dùng <code>gid</code>.</li>` : `
       <li>Mở sheet → <b>Chia sẻ</b> → <b>Bất kỳ ai có đường liên kết</b> → quyền <b>Người xem</b>.</li>
-      <li>Kiểm tra tên tab <code>${esc(MAIN_SHEET)}</code> và <code>${esc(PROJECT_TAB.sheet)}</code> khớp chính xác với tên hiển thị dưới đáy Google Sheet.</li>
+      <li>Kiểm tra <code>gid</code> / tên tab <code>${esc(MAIN_TAB.label)}</code> và
+          <code>${esc(PROJECT_TAB.label)}</code> ở đầu thẻ <code>&lt;script&gt;</code>.</li>`) + `
       <li>Nếu mạng công ty chặn <code>docs.google.com</code>, mở trang bằng mạng khác.</li>
       <li>Bấm <b>⟳ Làm mới</b> để thử lại.</li>
     </ol>`;
@@ -881,7 +953,7 @@ function logDiagnostics(){
     'Vị trí'   : COLMAP[f.k] != null ? 'cột ' + (COLMAP[f.k]+1) : ''
   })));
   if(SKIPPED) console.warn(SKIPPED + ' dòng bị bỏ qua vì không đọc được ngày hợp lệ.');
-  if(PROJ_INFO) console.info(`Tab "${PROJECT_TAB.sheet}": ${PROJ_INFO.links} dòng nối · mã phiếu = "${PROJ_INFO.idCol}" · dự án = "${PROJ_INFO.valCol}"`);
+  if(PROJ_INFO) console.info(`Tab "${PROJECT_TAB.label}" (đọc theo ${PROJ_INFO.by}): ${PROJ_INFO.links} dòng nối · mã phiếu = "${PROJ_INFO.idCol}" · dự án = "${PROJ_INFO.valCol}"`);
   if(PROJ_WARN) console.warn(PROJ_WARN);
   console.groupEnd();
 }
@@ -1342,7 +1414,7 @@ async function loadData(){
 
     const t = new Date();
     setStatus('ok', `● ${fmt(RECORDS.length)} phiếu · cập nhật ${pad2(t.getHours())}:${pad2(t.getMinutes())}`
-                  + (PROJ_INFO ? ` · ${fmt(PROJ_INFO.links)} dòng ${PROJECT_TAB.sheet}` : ''));
+                  + (PROJ_INFO ? ` · ${fmt(PROJ_INFO.links)} dòng ${PROJECT_TAB.label}` : ''));
   }catch(err){
     console.error('[AMECC] Lỗi tải dữ liệu:', err);
     setStatus('error', '⚠ Lỗi kết nối');
